@@ -51,6 +51,15 @@
   .dev{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:2px solid var(--line);border-radius:12px;margin-bottom:6px;font-size:13px;}
   .dev em{font-style:normal;color:var(--ink-soft);font-size:12px;}
   .dev b{font-size:12px;font-weight:800;color:var(--ink-soft);white-space:nowrap;}
+  .pill.denied{color:var(--danger);border-color:var(--danger);} .pill.denied .dot{background:var(--danger);animation:blink 1s infinite;}
+  .banner{display:none;}
+  .banner.show{display:block;border:2px solid var(--danger);background:#FDE6E5;border-radius:16px;padding:13px 15px;margin:0 0 14px;}
+  .banner b{display:block;font-size:14px;margin-bottom:5px;color:var(--ink);}
+  .banner p{margin:0 0 10px;font-size:12.5px;line-height:1.5;color:var(--ink-soft);}
+  .rules{background:#2C2447;color:#F4F1FF;border-radius:12px;padding:11px 13px;margin:9px 0;font-size:11.5px;line-height:1.5;overflow-x:auto;white-space:pre;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-user-select:all;user-select:all;}
+  .verline{font-size:11.5px;color:var(--ink-soft);opacity:.75;margin:14px 0 0;text-align:center;}
+  .backup-note{font-size:12.5px;line-height:1.5;color:var(--ink-soft);margin:8px 0 0;}
+  .backup-note.due{color:var(--amber);font-weight:700;}
   .warnbox{border:2px solid var(--amber);background:var(--amber-soft);border-radius:14px;padding:12px 14px;margin:10px 0;}
   .warnbox b{display:block;font-size:13px;margin-bottom:4px;}
   .warnbox p{margin:0;font-size:12.5px;line-height:1.5;}
@@ -190,6 +199,7 @@
 <body>
 <div class="wrap">
   <div class="topbar"><button class="pill local" id="statusPill"><span class="dot"></span><span id="statusText">On this phone</span></button></div>
+  <div class="banner" id="banner"></div>
 
   <div class="kidbar" id="kidbar"></div>
 
@@ -241,6 +251,8 @@
       <button class="tool-btn" id="importBtn">⬆ Restore</button>
     </div>
     <p>Data is stored on this phone. Turn on sharing to sync live with another phone, and back up now and then so nothing is ever lost.</p>
+    <p class="backup-note" id="backupNote"></p>
+    <p class="verline">Attendance Star Chart <span id="verText"></span> · works offline · your data stays on your phone</p>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none">
   </div>
 </div>
@@ -303,6 +315,10 @@
     return Object.keys(mk).length>0;
   }
 
+  /* Data-shape version stamped into every space, so a future version of this app
+     can recognise and migrate an older space instead of guessing. */
+  var SCHEMA=5;
+
   /* Firebase drops empty objects, so "every kid was deleted" and "this space was
      never set up" both arrive as a missing meta node. A scalar marker survives
      both, which lets pull() tell a deliberate deletion (adopt it) from a blank
@@ -310,7 +326,7 @@
   function spaceIsSeeded(tree){ return !!(tree&&tree.meta&&tree.meta.seeded); }
   function metaForWrite(tree){
     var m=(tree&&tree.meta&&typeof tree.meta==='object')?tree.meta:{};
-    return { kids:(m.kids&&typeof m.kids==='object')?m.kids:{}, seeded:true };
+    return { kids:(m.kids&&typeof m.kids==='object')?m.kids:{}, seeded:true, schema:SCHEMA };
   }
 
   function normName(s){ return String(s==null?"":s).trim().toLowerCase().replace(/\s+/g,' '); }
@@ -386,6 +402,7 @@
   }
 
   /* ================= CONSTANTS ================= */
+  var APP_VERSION="v6";
   var PALETTE=[
     {name:"Grape",c:"#7A5CF0",soft:"#EEE9FE"},{name:"Berry",c:"#E85D9A",soft:"#FCE7F1"},
     {name:"Tangerine",c:"#F58A3C",soft:"#FDECDD"},{name:"Grass",c:"#3BAF5A",soft:"#E4F6EA"},
@@ -394,7 +411,7 @@
   ];
   var EMOJIS=["🦄","🐶","🐱","🦖","🐰","🐼","🦊","🐸","🦁","🐵","🐧","🐢","🐨","🐷","🌟","🚀"];
 
-  var K_TREE="att.tree.v3", K_UI="att.ui.v3", K_SYNC="att.sync.v3", K_QUEUE="att.queue.v3", K_DEV="att.device.v3";
+  var K_TREE="att.tree.v3", K_UI="att.ui.v3", K_SYNC="att.sync.v3", K_QUEUE="att.queue.v3", K_DEV="att.device.v3", K_BAK="att.backup.v3";
 
   /* ================= LOCAL DATA ================= */
   var localTree={meta:{kids:{}},records:{}};
@@ -495,18 +512,102 @@
   function baseUrl(cfg){ cfg=cfg||syncCfg; return cleanUrl(cfg.dbUrl)+"/spaces/"+encodeURIComponent(cleanCode(cfg.code)); }
   function urlFor(path,cfg){ return baseUrl(cfg)+(path?"/"+path:"")+".json"; }
 
-  function apiGet(path,cfg){ return fetch(urlFor(path,cfg),{cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }); }
+  function httpErr(r){ var e=new Error("HTTP "+r.status); e.status=r.status; return e; }
+  /* Firebase answers a wrong-region address with 400 and a body naming the right
+     one. Databases outside us-central1 (e.g. asia-southeast1) live on
+     *.firebasedatabase.app, not *.firebaseio.com, so this is an easy mistake to
+     make and it otherwise surfaces as a bare "Offline" with no explanation. */
+  function failFrom(r){
+    return r.json().catch(function(){ return null; }).then(function(body){
+      var e=httpErr(r);
+      if(body&&body.correctUrl) e.correctUrl=String(body.correctUrl).replace(/\/+$/,"");
+      if(body&&body.error) e.detail=String(body.error);
+      throw e;
+    });
+  }
+  function isWrongRegion(e){ return !!(e&&e.correctUrl); }
+  /* 401/403 from Firebase means the rules rejected us — almost always because
+     test-mode rules expired. That is a different problem from being offline and
+     must not be reported as one, or the app dies quietly 30 days after setup. */
+  function isDenied(e){ return !!(e&&(e.status===401||e.status===403)); }
+  function apiGet(path,cfg){ return fetch(urlFor(path,cfg),{cache:"no-store"}).then(function(r){ if(!r.ok) return failFrom(r); return r.json(); }); }
   function apiSend(op,cfg){
     var init={method:op.method};
     if(op.method==="PUT"||op.method==="PATCH"){ init.headers={"Content-Type":"application/json"}; init.body=JSON.stringify(op.body===undefined?null:op.body); }
-    return fetch(urlFor(op.path,cfg),init).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return true; });
+    return fetch(urlFor(op.path,cfg),init).then(function(r){ if(!r.ok) return failFrom(r); return true; });
   }
 
-  function setStatus(s){ status=s; renderStatus(); }
+  /* The rules a space needs in order to keep working indefinitely. Firebase's
+     "test mode" rules contain an expiry date and flip to deny-all after 30 days,
+     which silently kills sync. These have no expiry: the space code is the
+     secret, and because there is no read permission above /spaces/$code, nobody
+     can list spaces or read the database root. */
+  var PERM_RULES='{\n  "rules": {\n    ".read": false,\n    ".write": false,\n    "spaces": {\n      "$code": {\n        ".read": true,\n        ".write": true\n      }\n    }\n  }\n}';
+
+  function setStatus(s){ status=s; renderStatus(); renderBanner(); }
+  /* A persistent, explicit banner for the one failure that would otherwise end
+     this app quietly: expired database rules. */
+  function renderBanner(){
+    var b=document.getElementById("banner");
+    if(!b) return;
+    if(syncOn()&&status==="badurl"&&suggestedUrl){
+      b.className="banner show";
+      b.innerHTML='<b>⚠ Wrong database address</b>'+
+        '<p>This phone is pointed at an address your database does not live at, so sync is stopped. '+
+        'Your data on this phone is safe. Firebase says the correct address is:</p>'+
+        '<div class="rules">'+escapeHtml(suggestedUrl)+'</div>'+
+        '<button class="btn primary" id="bannerUrlFix">Use this address</button>';
+      document.getElementById("bannerUrlFix").addEventListener("click",function(){
+        syncCfg.dbUrl=suggestedUrl; saveSync(); suggestedUrl=null;
+        lastRev=null; lastFull=0; setStatus("syncing"); scheduleFlush(); beat(true); pull(true);
+        toast("Address updated");
+      });
+      return;
+    }
+    if(syncOn()&&status==="denied"){
+      b.className="banner show";
+      b.innerHTML='<b>⚠ Your database is refusing this app</b>'+
+        '<p>Sync is blocked, so the two phones are no longer sharing. Your data on this phone is safe. '+
+        'The usual cause is Firebase <b>test mode rules expiring</b> — they lapse 30 days after setup.</p>'+
+        '<button class="btn ghost" id="bannerFix">Show me how to fix it</button>';
+      document.getElementById("bannerFix").addEventListener("click",openRulesSheet);
+    } else { b.className="banner"; b.innerHTML=""; }
+  }
+  function rulesBlockHTML(title,intro){
+    return '<div class="guide"><b>'+title+'</b><p>'+intro+'</p>'+
+      '<ol><li>Open <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> and pick your project.</li>'+
+      '<li>Go to <b>Build → Realtime Database</b>, then the <b>Rules</b> tab.</li>'+
+      '<li>Replace everything there with the text below, then click <b>Publish</b>.</li></ol>'+
+      '<pre class="rules" id="rulesText">'+escapeHtml(PERM_RULES)+'</pre>'+
+      '<button class="btn ghost" id="rulesCopy">Copy these rules</button></div>';
+  }
+  function wireRulesCopy(){
+    var el=document.getElementById("rulesCopy"); if(!el) return;
+    el.addEventListener("click",function(){
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(PERM_RULES).then(function(){ toast("Rules copied"); },function(){ toast("Long-press the text to copy"); });
+      } else toast("Long-press the text to copy");
+    });
+  }
+  function openRulesSheet(){
+    sheet.innerHTML='<h3>Keep sync working permanently</h3>'+
+      rulesBlockHTML("Set rules that never expire",
+        "These replace Firebase\u2019s temporary test-mode rules. They have no expiry date, and they stop anyone from reading your database root or listing spaces \u2014 your space code stays the secret.")+
+      '<p class="disc">Anyone who knows both the database address and your space code can still read the data, so keep the code private. A longer, less guessable code is safer.</p>'+
+      '<div class="actions col"><button class="btn primary" id="rulesRetry">I\u2019ve published them \u2014 try again</button><button class="btn ghost" id="rulesClose">Close</button></div>';
+    overlay.classList.add("show");
+    wireRulesCopy();
+    document.getElementById("rulesClose").addEventListener("click",closeModal);
+    document.getElementById("rulesRetry").addEventListener("click",function(){
+      closeModal(); setStatus("syncing"); lastRev=null; lastFull=0; scheduleFlush(); pull(true);
+    });
+  }
   function renderStatus(){
     var pill=document.getElementById("statusPill"), txt=document.getElementById("statusText");
     if(!syncOn()){ pill.className="pill local"; txt.textContent="On this phone"; return; }
     if(status==="syncing"){ pill.className="pill syncing"; txt.textContent="Syncing…"; return; }
+    if(status==="denied"){ pill.className="pill denied"; txt.textContent="Access blocked"; return; }
+    if(status==="badurl"){ pill.className="pill denied"; txt.textContent="Wrong address"; return; }
     if(status==="offline"){ pill.className="pill offline"; txt.textContent="Offline"; return; }
     /* "Synced" used to mean only "I reached my own space", which let two phones
        on two different spaces both claim to be synced. Report the phone count. */
@@ -520,44 +621,87 @@
     if(!syncOn()||flushing||!queue.length) return Promise.resolve();
     flushing=true; setStatus("syncing");
     function step(){
-      if(!queue.length){ flushing=false; setStatus("synced"); return Promise.resolve(); }
+      if(!queue.length){ flushing=false; return bumpRev().then(function(){ setStatus("synced"); }); }
       var op=queue[0];
       return apiSend(op).then(function(){ queue.shift(); saveQueue(); return step(); })
-        .catch(function(e){ flushing=false; setStatus("offline"); throw e; });
+        .catch(function(e){ flushing=false;
+          if(isWrongRegion(e)){ suggestedUrl=e.correctUrl; setStatus("badurl"); }
+          else setStatus(isDenied(e)?"denied":"offline");
+          throw e; });
     }
     return step();
   }
-  function pull(){
+  /* ---- Bandwidth: poll a tiny revision marker, not the whole database --------
+     The free Firebase tier allows 10 GB of downloads a month. Re-fetching the
+     entire space every 4s grows without bound as years of records accumulate and
+     would eventually exhaust that quota, at which point reads start failing. So
+     the 4s poll now GETs `rev` (a few bytes) and only fetches the full tree when
+     it has actually changed. A full resync also runs at least every FULL_MS as a
+     safety net, in case a writer died before it could bump `rev`.             */
+  /* FULL_MS is only a safety net for a `rev` bump that never landed. Opening or
+     focusing the app already forces a full resync, so this can be generous —
+     which keeps monthly downloads flat even after years of accumulated records. */
+  var suggestedUrl=null;
+  var lastRev=null, lastFull=0, FULL_MS=600000;
+  function bumpRev(){
+    if(!syncOn()) return Promise.resolve();
+    /* our own next poll should re-read the tree to confirm the write landed */
+    lastRev=null;
+    return apiSend({method:"PUT",path:"rev",body:{".sv":"timestamp"}}).catch(function(){});
+  }
+  function pull(force){
     if(!syncOn()||pulling) return;
     if(document.getElementById("overlay").classList.contains("show")) return; // don't disrupt open dialogs
     if(queue.length){ scheduleFlush(); return; }
     pulling=true;
     var forceBeat=false;
-    apiGet("").then(function(tree){
-      remoteDevices=(tree&&tree.devices)||{};
-      /* If this phone's heartbeat isn't in the space, re-register immediately
-         instead of waiting out the throttle. Covers a space that was cleared,
-         recreated, or joined for the first time — otherwise the pill would
-         under-report the phone count for up to 45s. */
-      forceBeat=!!(device&&!remoteDevices[device.id]);
-      /* Guard: never let a blank (or devices-only) space silently wipe real data
-         on this phone — re-seed it from here instead. A space that is empty but
-         carries the seeded marker was emptied on purpose, so that IS adopted.
-         meta and records are written separately so heartbeats survive. */
-      if(!treeHasKids(tree)&&!spaceIsSeeded(tree)){
-        if(treeHasKids(localTree)){
-          return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
-            .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); });
+    var now=Date.now();
+    var needFull=!!force||!lastFull||(now-lastFull)>=FULL_MS;
+    var decide = needFull ? Promise.resolve(true) : apiGet("rev").then(function(rev){
+      if(rev===null) return true;              // legacy space with no marker yet
+      if(rev!==lastRev){ return true; }        // somebody changed something
+      return false;                            // nothing to do — a few bytes spent
+    });
+    decide.then(function(full){
+      if(!full) return;                        // cheap path
+      return apiGet("").then(function(tree){
+        remoteDevices=(tree&&tree.devices)||{};
+        /* If this phone's heartbeat isn't in the space, re-register immediately
+           instead of waiting out the throttle. Covers a space that was cleared,
+           recreated, or joined for the first time — otherwise the pill would
+           under-report the phone count for up to 45s. */
+        forceBeat=!!(device&&!remoteDevices[device.id]);
+        lastFull=Date.now();
+        lastRev=(tree&&tree.rev!==undefined)?tree.rev:null;
+        /* Guard: never let a blank (or devices-only) space silently wipe real data
+           on this phone — re-seed it from here instead. A space that is empty but
+           carries the seeded marker was emptied on purpose, so that IS adopted.
+           meta and records are written separately so heartbeats survive. */
+        if(!treeHasKids(tree)&&!spaceIsSeeded(tree)){
+          if(treeHasKids(localTree)){
+            return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+              .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+              .then(bumpRev);
+          }
+          return;
         }
-        return;
-      }
-      localTree={meta:tree.meta||{kids:{}},records:tree.records||{}};
-      rebuildState(); saveLocal(); render();
+        localTree={meta:tree.meta||{kids:{}},records:tree.records||{}};
+        rebuildState(); saveLocal(); render();
+        if(lastRev===null) return bumpRev();   // seed the marker for a legacy space
+      });
     }).then(function(){ return beat(forceBeat); })
-      .then(function(){ setStatus("synced"); }).catch(function(){ setStatus("offline"); })
+      .then(function(){ setStatus("synced"); })
+      .catch(function(e){
+        if(isWrongRegion(e)){ suggestedUrl=e.correctUrl; setStatus("badurl"); }
+        else setStatus(isDenied(e)?"denied":"offline");
+      })
       .then(function(){ pulling=false; });
   }
-  function startPolling(){ if(pollTimer) clearInterval(pollTimer); if(syncOn()){ pollTimer=setInterval(pull,4000); } }
+  /* Polling stops while the app is in the background: it saves the free tier's
+     download quota and the phone's battery, and a hidden tab has nothing to show
+     anyway. Coming back to the app forces an immediate full resync. */
+  function startPolling(){ stopPolling(); if(syncOn()){ pollTimer=setInterval(function(){ pull(); },4000); } }
+  function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
 
   /* ================= DATES / RANGE / CALENDAR (unchanged core) ================= */
   function todayISO(){ return toISO(new Date()); }
@@ -641,6 +785,7 @@
     add.addEventListener("click",openAddKid); kidbar.appendChild(add);
   }
   function render(){
+    renderBackupNote();
     var kid=activeKid(); applyTheme(kid); renderKidbar(); renderStatus();
     var hasKid=!!kid;
     document.getElementById("markingBar").style.display=hasKid?"":"none";
@@ -822,7 +967,7 @@
         '<div class="share-box"><b>Share these with the other phone</b><div class="v" id="shDb"></div><b>Space code</b><div class="v" id="shCode" style="margin-bottom:0"></div></div>'+
         '<p class="disc">On the other phone: open this same app, tap the status button up top, choose “Set up sharing”, and enter exactly these two values. The space code is <b>case-sensitive</b> — “Ruhaan” and “ruhaan” are two different spaces.</p>'+
         '<label class="fld">Name this phone (so you can tell them apart)</label><input type="text" id="devName" maxlength="24">'+
-        '<div class="actions col"><button class="btn ghost" id="devSave">Save phone name</button><button class="btn ghost" id="syncCopy">Copy details to share</button><button class="btn warn" id="syncOff">Turn off sharing on this phone</button><button class="btn ghost" id="syncClose">Close</button></div>';
+        '<div class="actions col"><button class="btn ghost" id="rulesOpen">Make sync permanent (database rules)</button><button class="btn ghost" id="devSave">Save phone name</button><button class="btn ghost" id="syncCopy">Copy details to share</button><button class="btn warn" id="syncOff">Turn off sharing on this phone</button><button class="btn ghost" id="syncClose">Close</button></div>';
       overlay.classList.add("show");
       document.getElementById("shDb").textContent=cleanUrl(syncCfg.dbUrl);
       document.getElementById("shCode").textContent=cleanCode(syncCfg.code);
@@ -832,6 +977,7 @@
         if(!v) return; device.name=v; saveDevice(); beat(true).then(function(){ toast("Phone name saved"); });
       });
       document.getElementById("syncClose").addEventListener("click",closeModal);
+      document.getElementById("rulesOpen").addEventListener("click",function(){ closeModal(); openRulesSheet(); });
       document.getElementById("syncCopy").addEventListener("click",function(){
         var txt="Attendance app sync\nDatabase URL: "+cleanUrl(syncCfg.dbUrl)+"\nSpace code: "+cleanCode(syncCfg.code);
         if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){ toast("Copied — send it to the other phone"); },function(){ toast("Couldn't copy; long-press to select"); }); }
@@ -849,9 +995,11 @@
           '<li>Go to <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> and sign in with Google.</li>'+
           '<li>Click <b>Add project</b>, give it any name, and finish (you can skip Analytics).</li>'+
           '<li>In the left menu open <b>Build → Realtime Database</b>, click <b>Create Database</b>, pick a location, and choose <b>Start in test mode</b>.</li>'+
-          '<li>Copy the database web address shown at the top — it looks like <code>https://your-project-default-rtdb.firebaseio.com</code>. Paste it below.</li>'+
-          '<li>Pick any <b>space code</b> — a secret word you and your partner share (e.g. <code>sharma-family-7</code>).</li>'+
+          '<li>Copy the database web address shown at the top and paste it below. <b>Copy it exactly</b> — depending on the region you picked it ends in either <code>.firebaseio.com</code> or <code>.firebasedatabase.app</code> (e.g. <code>...asia-southeast1.firebasedatabase.app</code>). If you get it wrong the app will tell you the right one.</li>'+
+          '<li>Pick any <b>space code</b> — a long secret phrase you and your partner share (e.g. <code>sharma-family-7-tiger-lake</code>). Longer is safer.</li>'+
           '</ol></div>'+
+        rulesBlockHTML("Important: do this too, or sync stops in 30 days",
+          "Firebase\u2019s \u201ctest mode\u201d rules expire after 30 days and then block everything. Publish these instead \u2014 they never expire.")+
         '<label class="fld">Firebase database URL</label><input type="text" id="syncUrl" placeholder="https://your-project-default-rtdb.firebaseio.com">'+
         '<label class="fld">Space code (shared secret)</label><input type="text" id="syncCode" placeholder="e.g. sharma-family-7">'+
         '<div class="fp-box" id="fpPreview" style="display:none"><span class="fp-label">Space ID</span><span class="fp" id="fpVal">····</span>'+
@@ -862,6 +1010,7 @@
         '<div class="actions" style="margin-top:10px;"><button class="btn ghost" id="syncClose2">Cancel</button></div>';
       overlay.classList.add("show");
       document.getElementById("syncClose2").addEventListener("click",closeModal);
+      wireRulesCopy();
       var uIn=document.getElementById("syncUrl"), cIn=document.getElementById("syncCode");
       var fpBox=document.getElementById("fpPreview"), fpVal=document.getElementById("fpVal");
       function updateFp(){
@@ -881,7 +1030,19 @@
           .then(function(r){ if(!r.ok) throw new Error("read failed (HTTP "+r.status+")"); return r.json(); })
           .then(function(v){ if(v!==true) throw new Error("read-back mismatch"); return fetch(b+"/_conntest.json",{method:"DELETE"}); })
           .then(function(){ res.className="result ok"; res.textContent="✓ Connection works. Reading and writing both succeeded — you can turn on sync."; })
-          .catch(function(e){ res.className="result bad"; res.textContent="✗ Couldn't connect: "+e.message+". Check the URL is exactly as shown in Firebase, that Realtime Database is created and in test mode, and that you're online."; });
+          .catch(function(e){
+            res.className="result bad";
+            if(isWrongRegion(e)){
+              res.innerHTML="\u2717 That address is for a different region. Your database is at:<div class=\"rules\">"+escapeHtml(e.correctUrl)+"</div><button class=\"btn ghost\" id=\"useCorrect\">Use this address</button>";
+              document.getElementById("useCorrect").addEventListener("click",function(){
+                document.getElementById("syncUrl").value=e.correctUrl;
+                document.getElementById("syncUrl").dispatchEvent(new Event("input",{bubbles:true}));
+                res.className="result"; res.textContent="Address filled in \u2014 tap Test connection again.";
+              });
+              return;
+            }
+            res.textContent="\u2717 Couldn't connect: "+e.message+". Check the address is copied exactly from Firebase, that Realtime Database is created, and that you're online.";
+          });
       });
       document.getElementById("syncGo").addEventListener("click",function(){
         var url=cleanUrl(document.getElementById("syncUrl").value), code=cleanCode(document.getElementById("syncCode").value);
@@ -920,7 +1081,8 @@
       if(push){
         apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
           .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
-          .then(done,function(){ setStatus("offline"); });
+          .then(bumpRev)
+          .then(done,function(e){ setStatus(isDenied(e)?"denied":"offline"); });
       } else done();
       toast(msg);
     }
@@ -941,8 +1103,10 @@
       if(!treeHasKids(tree)){
         return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)},cfg)
           .then(function(){ return apiSend({method:"PUT",path:"records",body:(localTree&&localTree.records)||{}},cfg); })
+          .then(function(){ return apiSend({method:"PUT",path:"rev",body:{".sv":"timestamp"}},cfg); })
           .then(function(){
             syncCfg=cfg; saveSync(); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render();
+            lastRev=null; lastFull=0;
             beat(true).then(renderStatus);
             toast("Sync on — shared space created ⭐");
           });
@@ -952,17 +1116,36 @@
       }
     }).catch(function(e){
       var res=document.getElementById("syncResult");
-      if(res){ res.className="result bad"; res.textContent="✗ Couldn't connect: "+e.message+". Use Test connection to check the details."; }
+      if(res){
+        res.className="result bad";
+        if(isWrongRegion(e)) res.innerHTML="\u2717 That address is for a different region. Your database is at:<div class=\"rules\">"+escapeHtml(e.correctUrl)+"</div>Paste that above and try again.";
+        else res.textContent="\u2717 Couldn't connect: "+e.message+". Use Test connection to check the details.";
+      }
       setStatus(syncOn()?"synced":"local");
     });
   }
 
   /* ================= BACKUP / RESTORE ================= */
+  var BACKUP_NAG_DAYS=45;
+  function lastBackup(){ try{ var v=localStorage.getItem(K_BAK); return v?JSON.parse(v).ts:0; }catch(e){ return 0; } }
+  function noteBackup(){ try{ localStorage.setItem(K_BAK,JSON.stringify({ts:Date.now()})); }catch(e){} renderBackupNote(); }
+  /* Phones get lost, wiped and replaced, and browsers can evict site storage.
+     A cloud copy in one Firebase space is not a backup. So show how old the last
+     backup is, and nudge (never nag modally) once it goes stale. */
+  function renderBackupNote(){
+    var el=document.getElementById("backupNote"); if(!el) return;
+    if(!treeHasKids(localTree)){ el.className="backup-note"; el.textContent=""; return; }
+    var ts=lastBackup();
+    if(!ts){ el.className="backup-note due"; el.textContent="You haven\u2019t backed up yet. One tap on Back up saves a copy you can restore onto any phone."; return; }
+    var days=Math.floor((Date.now()-ts)/86400000);
+    if(days>=BACKUP_NAG_DAYS){ el.className="backup-note due"; el.textContent="Last backup was "+days+" days ago \u2014 worth doing another one."; }
+    else { el.className="backup-note"; el.textContent="Last backup: "+(days<1?"today":days===1?"yesterday":days+" days ago")+"."; }
+  }
   document.getElementById("exportBtn").addEventListener("click",function(){
     var out={kids:state.kids}; // export as readable state
     var blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"}), url=URL.createObjectURL(blob), a=document.createElement("a");
     a.href=url; a.download="attendance-backup-"+todayISO()+".json"; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function(){ URL.revokeObjectURL(url); },1000); toast("Backup downloaded");
+    setTimeout(function(){ URL.revokeObjectURL(url); },1000); noteBackup(); toast("Backup downloaded");
   });
   document.getElementById("importBtn").addEventListener("click",function(){ document.getElementById("importFile").click(); });
   document.getElementById("importFile").addEventListener("change",function(e){
@@ -977,7 +1160,8 @@
           if(syncOn()){ queue=[]; saveQueue();
             apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
               .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
-              .then(function(){ setStatus("synced"); beat(true); },function(){ setStatus("offline"); }); }
+              .then(bumpRev)
+              .then(function(){ setStatus("synced"); beat(true); },function(e){ setStatus(isDenied(e)?"denied":"offline"); }); }
           toast("Backup restored");
         }});
     };
@@ -989,11 +1173,19 @@
   function toast(m){ toastEl.textContent=m; toastEl.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.classList.remove("show"); },2000); }
 
   /* ================= BOOT ================= */
-  loadLocal(); render();
-  if(syncOn()){ setStatus("syncing"); startPolling(); beat(true); pull(); }
-  document.addEventListener("visibilitychange",function(){ if(!document.hidden){ beat(true); pull(); } });
-  window.addEventListener("focus",pull);
-  window.addEventListener("online",function(){ scheduleFlush(); beat(true); pull(); });
+  (function(){ var v=document.getElementById("verText"); if(v) v.textContent=APP_VERSION+" (schema "+SCHEMA+")"; })();
+  loadLocal(); render(); renderBackupNote(); renderBanner();
+  /* Ask the browser not to evict this app's storage. Safari in particular can
+     clear script-writable storage for sites left unused, and this app's data is
+     the only copy on a phone that isn't backed up. Best-effort; ignore refusals. */
+  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  if(syncOn()){ setStatus("syncing"); startPolling(); beat(true); pull(true); }
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ stopPolling(); }
+    else if(syncOn()){ startPolling(); beat(true); pull(true); }
+  });
+  window.addEventListener("focus",function(){ pull(true); });
+  window.addEventListener("online",function(){ scheduleFlush(); beat(true); pull(true); });
 })();
 </script>
 </body>

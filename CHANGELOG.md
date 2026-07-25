@@ -2,6 +2,33 @@
 
 All notable changes to this project are recorded here. Newest at the top.
 
+## v6 — Built to last
+- **Non-expiring database rules, surfaced in the app.** Firebase test-mode rules
+  expire 30 days after setup and then block everything, which would have killed sync
+  silently. The setup guide, the sharing sheet and the new error banner all hand over
+  permanent replacement rules with a copy button. The rules also deny reads above
+  your own space, so nobody can read the database root or list spaces.
+- **"Access blocked" is now its own state.** A rules rejection used to be reported as
+  "Offline", which is why this failure mode was so hard to diagnose. It now shows a
+  red banner naming the likely cause, with a one-tap fix and retry.
+- **Downloads no longer grow without limit.** Polling used to re-download the entire
+  database every 4 seconds forever; with a tab left open that crossed the free tier's
+  10 GB/month inside a year. The poll now checks a tiny revision marker (~13 bytes)
+  and only fetches everything when something actually changed.
+- **Polling pauses while the app is in the background**, saving data and battery.
+  Reopening the app forces an immediate full resync.
+- **Backup age is shown**, with a nudge after 45 days — one cloud copy is not a
+  backup. The app also asks the browser to keep its storage, since Safari can evict
+  data for sites left unused.
+- Data now carries a schema version, and the app version is shown at the bottom of
+  the tools section.
+- **Wrong database address fixes itself.** Databases outside us-central1 sit on a
+  different hostname; getting it wrong used to show a bare "Offline". The app now says
+  "Wrong address", shows the correct one (Firebase returns it) and offers a one-tap
+  fix. The setup guide no longer implies a single hostname pattern.
+- Tests: 60 → 61 unit, plus 60 two-phone integration assertions covering the cheap
+  polling path, blocked-rules recovery and region self-correction.
+
 ## v5 — Trustworthy sync (fixes a real two-phone desync)
 - **Space ID.** A 4-character fingerprint of the database URL + space code, shown
   in the setup screen before sync is turned on and in the sharing sheet after.

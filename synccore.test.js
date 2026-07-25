@@ -34,7 +34,6 @@ function treeToState(tree,prevActiveId){
   var activeKidId=(prevActiveId&&kids.some(function(k){return k.id===prevActiveId;}))?prevActiveId:(kids.length?kids[0].id:null);
   return {kids:kids,activeKidId:activeKidId};
 }
-
 function opMarkDay(kidId,classId,date,val){ return [{method:val?'PUT':'DELETE',path:'records/'+kidId+'/'+classId+'/'+date,body:val?true:undefined}]; }
 function opAddKid(kid,order){ return [{method:'PUT',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft,order:order,classes:{}}}]; }
 function opEditKid(kid){ return [{method:'PATCH',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft}}]; }
@@ -52,6 +51,10 @@ function treeHasKids(tree){
   return Object.keys(mk).length>0;
 }
 
+/* Data-shape version stamped into every space, so a future version of this app
+   can recognise and migrate an older space instead of guessing. */
+var SCHEMA=5;
+
 /* Firebase drops empty objects, so "every kid was deleted" and "this space was
    never set up" both arrive as a missing meta node. A scalar marker survives
    both, which lets pull() tell a deliberate deletion (adopt it) from a blank
@@ -59,7 +62,7 @@ function treeHasKids(tree){
 function spaceIsSeeded(tree){ return !!(tree&&tree.meta&&tree.meta.seeded); }
 function metaForWrite(tree){
   var m=(tree&&tree.meta&&typeof tree.meta==='object')?tree.meta:{};
-  return { kids:(m.kids&&typeof m.kids==='object')?m.kids:{}, seeded:true };
+  return { kids:(m.kids&&typeof m.kids==='object')?m.kids:{}, seeded:true, schema:SCHEMA };
 }
 
 function normName(s){ return String(s==null?"":s).trim().toLowerCase().replace(/\s+/g,' '); }
@@ -245,8 +248,9 @@ ok(!treeHasKids({meta:{kids:{}}}),"empty kids map is not data");
 ok(treeHasKids({meta:{kids:{k1:{name:"A"}}}}),"tree with a kid is data");
 ok(!spaceIsSeeded({meta:{kids:{}}}),"unseeded space detected");
 ok(spaceIsSeeded({meta:{seeded:true}}),"seeded space detected");
-eq(metaForWrite({meta:{kids:{a:{name:"A"}}}}),{kids:{a:{name:"A"}},seeded:true},"metaForWrite keeps kids, adds marker");
-eq(metaForWrite(null),{kids:{},seeded:true},"metaForWrite tolerates a null tree");
+eq(metaForWrite({meta:{kids:{a:{name:"A"}}}}),{kids:{a:{name:"A"}},seeded:true,schema:SCHEMA},"metaForWrite keeps kids, adds markers");
+eq(metaForWrite(null),{kids:{},seeded:true,schema:SCHEMA},"metaForWrite tolerates a null tree");
+ok(typeof SCHEMA==="number"&&SCHEMA>=5,"schema version is stamped for future migrations");
 
 /* --- Test 10: space fingerprint is comparable across phones --- */
 var U="https://example-default-rtdb.firebaseio.com";

@@ -36,6 +36,45 @@ In-memory / rendered state (`state`):
 
 Dates are handled as local `YYYY-MM-DD` strings (never `toISOString()`, to avoid timezone drift). String comparison works for range checks because the format is zero-padded and sortable.
 
+## Designed to keep running for years (do not undo these)
+
+Three things would otherwise have killed this app on a timer. Each fix is load-bearing.
+
+1. **Firebase "test mode" rules expire after 30 days** and then deny every read and
+   write. A space set up in test mode dies silently a month later. The app now ships
+   the permanent replacement rules (`PERM_RULES`) inside the setup guide, in the
+   sharing sheet, and in the error banner, with a copy button. They have no expiry
+   date and deny reads above `/spaces/$code`, so nobody can read the database root
+   or enumerate spaces — the space code is the capability.
+2. **Downloads were unbounded.** Polling used to GET the *entire* space every 4s,
+   and the space grows forever. With a tab left open that crossed the free tier's
+   10 GB/month within about a year, at which point reads start failing. Now the 4s
+   poll GETs `rev` (~13 bytes) and only fetches the whole tree when `rev` changed;
+   `bumpRev()` stamps `rev` after every write path. A full resync also runs at most
+   every `FULL_MS` (10 min) purely as a safety net for a `rev` bump that never
+   landed, and on focus/visibility/online/connect. Measured: ~13 B per idle poll
+   instead of ~5 KB, which keeps monthly traffic flat as records accumulate.
+   **If you add a write path, call `bumpRev()` or the other phone won't be told.**
+3. **Polling stops entirely while the app is backgrounded** (`stopPolling()` on
+   `visibilitychange`), saving quota and battery; returning to the app forces a
+   full resync so nothing is missed.
+
+A wrong-region database address is also handled explicitly. Databases outside
+us-central1 live on `*.firebasedatabase.app`, not `*.firebaseio.com`; Firebase answers
+the wrong host with HTTP 400 and a body containing `correctUrl`. `failFrom()` captures
+that, the pill shows `badurl` ("Wrong address"), and the banner offers a one-tap fix
+that rewrites the stored address. The setup guide no longer implies every database is
+on `firebaseio.com`. Without this the mistake surfaces as a bare "Offline".
+
+Also for longevity: `401/403` is reported as `denied` ("Access blocked") with a
+banner naming expired rules as the likely cause — never as `offline`, which is what
+made this class of failure so hard to diagnose. `meta/schema` stamps the data shape
+so a future version can migrate rather than guess. The app requests
+`navigator.storage.persist()` because Safari can evict script-writable storage for
+sites left unused. The tools section shows how long ago the last backup was and
+nudges after 45 days, because one Firebase space is not a backup. The app version is
+printed at the bottom of the tools section so you can tell what a phone is running.
+
 ## Sync architecture (read carefully before touching)
 
 - Backend: **the owner's own Google Firebase Realtime Database**, accessed over plain REST with `fetch` (no Firebase SDK, to keep the single-file/offline property). Config (database URL + a shared "space code") is entered by the user in-app and stored in `localStorage` under `att.sync.v3`. **The config is never stored in this repo and must never be committed. Do not paste real Firebase URLs or space codes into any file here.**
@@ -46,15 +85,17 @@ Dates are handled as local `YYYY-MM-DD` strings (never `toISOString()`, to avoid
     meta/kids/<kidId> = { name, emoji, color, soft, order, classes: { <classId>: { name, order } } }
     records/<kidId>/<classId>/<YYYY-MM-DD> = true      // absence = key removed
     devices/<deviceId> = { name, ts }                  // presence heartbeat, NOT data
+    rev = <server timestamp>                           // change marker, cheap to poll
+    meta/schema = <n>                                  // data-shape version
   ```
-  `localTree` holds only `meta` and `records`. `devices` is presence bookkeeping
+  `localTree` holds only `meta` and `records`. `rev` and `devices` are bookkeeping
   and is deliberately kept out of the local tree, out of backups, and out of the
   op queue.
   `state` is derived from `localTree` via `treeToState()` for rendering; `stateToTree()` goes the other way (used for backup restore / seeding a new space).
 - **Every mutation is expressed as one or more REST "ops"** (`opMarkDay`, `opAddKid`, `opEditKid`, `opDeleteKid`, `opAddClass`, `opRenameClass`, `opDeleteClass`). `applyOps()` applies each op to `localTree` locally AND (if sync is on) queues it and flushes it to Firebase. Because each op targets a **specific leaf path** (e.g. one day, one class), concurrent edits from two phones do **not** clobber each other — this is the key correctness property. Do not replace this with whole-document last-write-wins.
 - Offline edits are queued in `localStorage` (`att.queue.v3`) and flushed on reconnect; ops are idempotent (PUT true / DELETE), so retries are safe.
 - Sync is **poll-based**: `pull()` GETs the whole space every 4s and on focus/visibility/online, and adopts the remote tree. It skips adopting while there are unflushed local ops or an open dialog.
-- Status pill states: `local` (sync off), `syncing`, `synced`, `alone`, `offline`.
+- Status pill states: `local` (sync off), `syncing`, `synced`, `alone`, `denied`, `badurl`, `offline`.
   **`synced` reports the phone count** (“Synced · 2 phones”), and `alone` (amber,
   “Synced · 1 phone”) means this phone reached its space but no other phone has
   ever appeared there. This distinction exists because the pill used to say only
@@ -143,10 +184,17 @@ This has happened for real; work through it in this order.
    **Merge both**, which unions every marked day and folds same-named kids and
    classes together. If the two phones' data has already diverged, prefer Merge
    over "Use shared copy".
-5. **If the pill says Offline,** the database URL is wrong or unreachable, or the
-   Realtime Database's test-mode rules have expired (Firebase test mode lapses
-   after 30 days and then denies all reads and writes). Use **Test connection** in
-   the setup sheet to distinguish the two.
+5. **If the pill says "Access blocked" (red),** the database rejected the app —
+   nearly always expired test-mode rules. Tap the banner's **Show me how to fix it**
+   and publish the rules it gives you. Your on-phone data is unaffected.
+6. **If the pill says "Wrong address",** the stored database address is for a
+   different region. Tap **Use this address** in the banner; the app already knows the
+   right one because Firebase returns it.
+7. **If the pill says Offline,** the phone has no connection, or the address is wrong
+   in a way Firebase can't diagnose. **Test connection** distinguishes the two.
+8. **If reads suddenly fail with no rule change,** check the Firebase console's usage
+   tab: the free tier allows 1 GB stored and 10 GB downloaded per month, and
+   exceeding either causes rejections until the month rolls over.
 
 ## How to deploy
 
@@ -163,3 +211,7 @@ Upload `index.html`, `README.md`, `synccore.test.js` to a GitHub repo. Optionall
    phone, and merge-on-join. Fixes a real-world desync in which two phones sat on
    two different spaces (space codes differing only by capitalisation) while both
    displayed "Synced".
+6. Longevity: non-expiring database rules surfaced in-app, revision-based polling so
+   downloads stay inside the free tier as records accumulate, background polling
+   paused, blocked-access diagnosis, backup-age reminder, persistent-storage request,
+   schema stamp, a visible app version, and self-correcting wrong-region addresses.
