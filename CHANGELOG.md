@@ -2,6 +2,29 @@
 
 All notable changes to this project are recorded here. Newest at the top.
 
+## v5 — Trustworthy sync (fixes a real two-phone desync)
+- **Space ID.** A 4-character fingerprint of the database URL + space code, shown
+  in the setup screen before sync is turned on and in the sharing sheet after.
+  Both phones must show the same 4 characters, which makes a mistyped or
+  differently-capitalised space code obvious instead of silent.
+- **The status pill no longer overstates things.** It now reports the actual phone
+  count ("Synced · 2 phones") and turns amber with "Synced · 1 phone" when no other
+  phone has ever joined the space. Previously "Synced" only meant "I reached my own
+  space", so two phones on two different spaces both claimed to be synced.
+- **Phone list.** Each phone sends a lightweight presence heartbeat and the sharing
+  sheet lists every phone on the space with last-seen times, plus a warning when
+  this phone is alone. Phones can be given friendly names.
+- **Merge when joining.** Joining a space that already has data now offers "Merge
+  both" alongside the old replace. Same-named kids and classes fold together
+  instead of duplicating, and every marked day from both phones is kept.
+- **A blank space can no longer wipe a phone.** If the shared space has no kids but
+  this phone does, the space is re-seeded instead of the phone being emptied.
+  Deliberately deleting every kid still propagates, via a `meta/seeded` marker.
+- The star-burst animation can no longer prevent the screen from refreshing on
+  browsers without the Web Animations API.
+- Tests: 22 → 60, and the suite now fails if the copy of the sync core in
+  `synccore.test.js` has drifted from the one in `index.html`.
+
 ## v4 — Live two-phone sync
 - Optional live sync between two phones using the owner's own Google Firebase
   Realtime Database (plain REST, no SDK, no build step).

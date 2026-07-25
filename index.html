@@ -42,6 +42,18 @@
   .pill.synced{color:var(--green-deep);border-color:var(--green);} .pill.synced .dot{background:var(--green);}
   .pill.syncing{color:var(--amber);border-color:var(--amber);} .pill.syncing .dot{background:var(--amber);animation:blink 1s infinite;}
   .pill.offline{color:var(--danger);border-color:var(--danger);} .pill.offline .dot{background:var(--danger);}
+  .pill.alone{color:var(--amber);border-color:var(--amber);} .pill.alone .dot{background:var(--amber);}
+  .fp-box{border:2px dashed var(--line-strong);border-radius:14px;padding:12px 14px;margin:12px 0;text-align:center;}
+  .fp-label{display:block;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);}
+  .fp{display:block;font-size:30px;font-weight:900;letter-spacing:.16em;margin:4px 0 2px;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .fp-note{display:block;font-size:12px;color:var(--ink-soft);line-height:1.45;}
+  .dev-list{margin:6px 0 12px;}
+  .dev{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:2px solid var(--line);border-radius:12px;margin-bottom:6px;font-size:13px;}
+  .dev em{font-style:normal;color:var(--ink-soft);font-size:12px;}
+  .dev b{font-size:12px;font-weight:800;color:var(--ink-soft);white-space:nowrap;}
+  .warnbox{border:2px solid var(--amber);background:var(--amber-soft);border-radius:14px;padding:12px 14px;margin:10px 0;}
+  .warnbox b{display:block;font-size:13px;margin-bottom:4px;}
+  .warnbox p{margin:0;font-size:12.5px;line-height:1.5;}
   @keyframes blink{50%{opacity:.3;}}
 
   .kidbar{display:flex;gap:12px;overflow-x:auto;padding:6px 2px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -282,6 +294,97 @@
   function opRenameClass(kidId,classId,name){ return [{method:'PATCH',path:'meta/kids/'+kidId+'/classes/'+classId,body:{name:name}}]; }
   function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId}]; }
 
+  /* Does this tree actually hold roster data? Used to refuse to adopt an empty
+     remote over a populated local tree (see pull()). A space that contains only
+     a devices/ node is NOT data. */
+  function treeHasKids(tree){
+    var mk=tree&&tree.meta&&tree.meta.kids;
+    if(!mk||typeof mk!=='object') return false;
+    return Object.keys(mk).length>0;
+  }
+
+  /* Firebase drops empty objects, so "every kid was deleted" and "this space was
+     never set up" both arrive as a missing meta node. A scalar marker survives
+     both, which lets pull() tell a deliberate deletion (adopt it) from a blank
+     space (re-seed it instead of wiping this phone). */
+  function spaceIsSeeded(tree){ return !!(tree&&tree.meta&&tree.meta.seeded); }
+  function metaForWrite(tree){
+    var m=(tree&&tree.meta&&typeof tree.meta==='object')?tree.meta:{};
+    return { kids:(m.kids&&typeof m.kids==='object')?m.kids:{}, seeded:true };
+  }
+
+  function normName(s){ return String(s==null?"":s).trim().toLowerCase().replace(/\s+/g,' '); }
+
+  /* Union-merge two trees. `incoming` (the shared space) wins on scalar
+     conflicts; nothing is ever dropped. Kids and classes are matched by id
+     first, then by normalised name — so two phones that each created their own
+     "Ruhaan" / "Phonics" fold into one instead of duplicating. Records are a
+     union: a day marked on either phone stays marked. */
+  function mergeTrees(base,incoming){
+    var out=JSON.parse(JSON.stringify(incoming||{}));
+    if(!out.meta||typeof out.meta!=='object') out.meta={};
+    if(!out.meta.kids||typeof out.meta.kids!=='object') out.meta.kids={};
+    if(!out.records||typeof out.records!=='object') out.records={};
+    var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{};
+
+    var maxKidOrder=-1, kidByName={};
+    Object.keys(out.meta.kids).forEach(function(id){
+      var k=out.meta.kids[id]||{}, o=(k.order==null?0:k.order);
+      if(o>maxKidOrder) maxKidOrder=o;
+      var n=normName(k.name); if(n&&kidByName[n]===undefined) kidByName[n]=id;
+    });
+
+    Object.keys(bKids).forEach(function(bid){
+      var bKid=bKids[bid]||{}, bn=normName(bKid.name);
+      var tid = out.meta.kids[bid] ? bid : (kidByName[bn]!==undefined ? kidByName[bn] : null);
+      if(tid===null){
+        tid=bid; maxKidOrder++;
+        out.meta.kids[tid]={name:bKid.name,emoji:bKid.emoji,color:bKid.color,soft:bKid.soft,order:maxKidOrder,classes:{}};
+        if(bn) kidByName[bn]=tid;
+      }
+      var tKid=out.meta.kids[tid];
+      if(!tKid.classes||typeof tKid.classes!=='object') tKid.classes={};
+
+      var maxClsOrder=-1, clsByName={};
+      Object.keys(tKid.classes).forEach(function(cid){
+        var c=tKid.classes[cid]||{}, o=(c.order==null?0:c.order);
+        if(o>maxClsOrder) maxClsOrder=o;
+        var n=normName(c.name); if(n&&clsByName[n]===undefined) clsByName[n]=cid;
+      });
+
+      var bClasses=bKid.classes||{};
+      Object.keys(bClasses).forEach(function(bcid){
+        var bCls=bClasses[bcid]||{}, cn=normName(bCls.name);
+        var tcid = tKid.classes[bcid] ? bcid : (clsByName[cn]!==undefined ? clsByName[cn] : null);
+        if(tcid===null){
+          tcid=bcid; maxClsOrder++;
+          tKid.classes[tcid]={name:bCls.name,order:maxClsOrder};
+          if(cn) clsByName[cn]=tcid;
+        }
+        var src=(bRec[bid]&&bRec[bid][bcid])||{}, any=false, d;
+        for(d in src){ if(src[d]){ any=true; break; } }
+        if(any){
+          if(!out.records[tid]) out.records[tid]={};
+          if(!out.records[tid][tcid]) out.records[tid][tcid]={};
+          for(d in src){ if(src[d]) out.records[tid][tcid][d]=true; }
+        }
+      });
+    });
+    return out;
+  }
+
+  /* Short human-comparable id for a space. Two phones on the same space always
+     show the same 4 characters; any difference in URL or code (including a
+     difference in capitalisation of the code) shows up immediately. Host case
+     is normalised because DNS is case-insensitive; the code's case is NOT,
+     because Firebase paths are case-sensitive. */
+  function spaceFingerprint(dbUrl,code){
+    var s=String(dbUrl==null?"":dbUrl).trim().replace(/\/+$/,"").toLowerCase()+"|"+String(code==null?"":code);
+    var h=0x811c9dc5;
+    for(var i=0;i<s.length;i++){ h=(h^s.charCodeAt(i))>>>0; h=(h*16777619)>>>0; }
+    return (("0000"+h.toString(36).toUpperCase()).slice(-4));
+  }
+
   /* ================= CONSTANTS ================= */
   var PALETTE=[
     {name:"Grape",c:"#7A5CF0",soft:"#EEE9FE"},{name:"Berry",c:"#E85D9A",soft:"#FCE7F1"},
@@ -291,7 +394,7 @@
   ];
   var EMOJIS=["🦄","🐶","🐱","🦖","🐰","🐼","🦊","🐸","🦁","🐵","🐧","🐢","🐨","🐷","🌟","🚀"];
 
-  var K_TREE="att.tree.v3", K_UI="att.ui.v3", K_SYNC="att.sync.v3", K_QUEUE="att.queue.v3";
+  var K_TREE="att.tree.v3", K_UI="att.ui.v3", K_SYNC="att.sync.v3", K_QUEUE="att.queue.v3", K_DEV="att.device.v3";
 
   /* ================= LOCAL DATA ================= */
   var localTree={meta:{kids:{}},records:{}};
@@ -317,7 +420,9 @@
       var u=localStorage.getItem(K_UI); if(u){ var uu=JSON.parse(u); if(uu&&uu.activeKidId) ui.activeKidId=uu.activeKidId; }
       var sc=localStorage.getItem(K_SYNC); if(sc){ syncCfg=JSON.parse(sc); }
       var q=localStorage.getItem(K_QUEUE); if(q){ queue=JSON.parse(q)||[]; }
+      var dv=localStorage.getItem(K_DEV); if(dv){ device=JSON.parse(dv); }
     }catch(e){}
+    if(!device||!device.id){ device={id:newDeviceId(),name:guessDeviceName()}; saveDevice(); }
     if(!localTree||typeof localTree!=='object') localTree={meta:{kids:{}},records:{}};
     rebuildState();
     saveLocal();
@@ -336,6 +441,53 @@
   /* ================= SYNC ================= */
   var syncCfg=null, queue=[], flushing=false, pulling=false, pollTimer=null, status="local";
   function syncOn(){ return !!(syncCfg&&syncCfg.dbUrl&&syncCfg.code); }
+
+  /* ---- Who else is on this space? -------------------------------------------
+     Each phone writes a heartbeat to devices/<id>. pull() already GETs the
+     whole space, so reading the other phone's heartbeat costs nothing extra.
+     Heartbeats are sent directly, never through the op queue: they are not
+     data, they must not be replayed, and they must never fail a flush.        */
+  var device=null, remoteDevices={}, lastBeat=0;
+  function newDeviceId(){ return "d"+Date.now().toString(36)+Math.floor(Math.random()*1679616).toString(36); }
+  function guessDeviceName(){
+    var ua=navigator.userAgent||"";
+    if(/iPad/.test(ua)) return "iPad";
+    if(/iPhone/.test(ua)) return "iPhone";
+    if(/Android/.test(ua)) return "Android phone";
+    return "This phone";
+  }
+  function saveDevice(){ try{ localStorage.setItem(K_DEV,JSON.stringify(device)); }catch(e){} }
+  function beat(force){
+    if(!syncOn()||!device) return Promise.resolve();
+    var now=Date.now();
+    if(!force && now-lastBeat<45000) return Promise.resolve();
+    lastBeat=now;
+    return apiSend({method:"PUT",path:"devices/"+device.id,body:{name:device.name,ts:{".sv":"timestamp"}}})
+      .catch(function(){ lastBeat=0; });
+  }
+  /* Other phones seen on this space, newest first. Ages are measured against
+     the newest heartbeat rather than this phone's clock, so a wrong clock on
+     either phone can't make "last seen" nonsense. */
+  function otherDevices(){
+    var mine=device?device.id:"", out=[], nowRef=0;
+    Object.keys(remoteDevices||{}).forEach(function(id){
+      var d=remoteDevices[id]||{}, ts=(typeof d.ts==="number")?d.ts:null;
+      if(ts!==null&&ts>nowRef) nowRef=ts;
+      if(id!==mine) out.push({id:id,name:d.name||"Other phone",ts:ts});
+    });
+    if(!nowRef) nowRef=Date.now();
+    out.forEach(function(d){ d.age=(d.ts===null)?null:Math.max(0,nowRef-d.ts); });
+    return out.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  }
+  function agoText(ms){
+    if(ms===null||ms===undefined) return "last seen unknown";
+    var s=Math.round(ms/1000);
+    if(s<15) return "active now";
+    if(s<90) return "seen "+s+"s ago";
+    var m=Math.round(s/60); if(m<90) return "seen "+m+" min ago";
+    var h=Math.round(m/60); if(h<48) return "seen "+h+"h ago";
+    return "seen "+Math.round(h/24)+" days ago";
+  }
   function saveSync(){ try{ syncCfg?localStorage.setItem(K_SYNC,JSON.stringify(syncCfg)):localStorage.removeItem(K_SYNC); }catch(e){} }
   function saveQueue(){ try{ localStorage.setItem(K_QUEUE,JSON.stringify(queue)); }catch(e){} }
   function cleanUrl(u){ return (u||"").trim().replace(/\/+$/,""); }
@@ -353,9 +505,14 @@
   function setStatus(s){ status=s; renderStatus(); }
   function renderStatus(){
     var pill=document.getElementById("statusPill"), txt=document.getElementById("statusText");
-    pill.className="pill "+(syncOn()?status:"local");
-    txt.textContent = !syncOn() ? "On this phone" :
-      status==="synced" ? "Synced" : status==="syncing" ? "Syncing…" : status==="offline" ? "Offline" : "Synced";
+    if(!syncOn()){ pill.className="pill local"; txt.textContent="On this phone"; return; }
+    if(status==="syncing"){ pill.className="pill syncing"; txt.textContent="Syncing…"; return; }
+    if(status==="offline"){ pill.className="pill offline"; txt.textContent="Offline"; return; }
+    /* "Synced" used to mean only "I reached my own space", which let two phones
+       on two different spaces both claim to be synced. Report the phone count. */
+    var others=otherDevices().length;
+    pill.className="pill "+(others?"synced":"alone");
+    txt.textContent = others ? ("Synced · "+(others+1)+" phones") : "Synced · 1 phone";
   }
 
   function scheduleFlush(){ flush().catch(function(){}); }
@@ -375,10 +532,29 @@
     if(document.getElementById("overlay").classList.contains("show")) return; // don't disrupt open dialogs
     if(queue.length){ scheduleFlush(); return; }
     pulling=true;
+    var forceBeat=false;
     apiGet("").then(function(tree){
-      if(tree===null){ return apiSend({method:"PUT",path:"",body:localTree||{meta:{kids:{}},records:{}}}); }
-      localTree=tree; rebuildState(); saveLocal(); render();
-    }).then(function(){ setStatus("synced"); }).catch(function(){ setStatus("offline"); })
+      remoteDevices=(tree&&tree.devices)||{};
+      /* If this phone's heartbeat isn't in the space, re-register immediately
+         instead of waiting out the throttle. Covers a space that was cleared,
+         recreated, or joined for the first time — otherwise the pill would
+         under-report the phone count for up to 45s. */
+      forceBeat=!!(device&&!remoteDevices[device.id]);
+      /* Guard: never let a blank (or devices-only) space silently wipe real data
+         on this phone — re-seed it from here instead. A space that is empty but
+         carries the seeded marker was emptied on purpose, so that IS adopted.
+         meta and records are written separately so heartbeats survive. */
+      if(!treeHasKids(tree)&&!spaceIsSeeded(tree)){
+        if(treeHasKids(localTree)){
+          return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+            .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); });
+        }
+        return;
+      }
+      localTree={meta:tree.meta||{kids:{}},records:tree.records||{}};
+      rebuildState(); saveLocal(); render();
+    }).then(function(){ return beat(forceBeat); })
+      .then(function(){ setStatus("synced"); }).catch(function(){ setStatus("offline"); })
       .then(function(){ pulling=false; });
   }
   function startPolling(){ if(pollTimer) clearInterval(pollTimer); if(syncOn()){ pollTimer=setInterval(pull,4000); } }
@@ -521,12 +697,19 @@
 
   function celebrate(btn,color){
     if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion:reduce)").matches) return;
-    var rect=btn.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
-    for(var i=0;i<9;i++){ (function(){ var s=document.createElement("div"); s.className="pop"; s.textContent="⭐";
-      s.style.left=cx+"px"; s.style.top=cy+"px"; document.body.appendChild(s);
-      var ang=(Math.random()*Math.PI)-Math.PI,dist=60+Math.random()*70,dx=Math.cos(ang)*dist,dy=-Math.abs(Math.sin(ang)*dist)-30-Math.random()*40;
-      s.animate([{transform:"translate(-50%,-50%) scale(.4) rotate(0deg)",opacity:1},{transform:"translate("+dx+"px,"+dy+"px) scale(1.1) rotate("+(Math.random()*360)+"deg)",opacity:0}],{duration:750+Math.random()*250,easing:"cubic-bezier(.2,.7,.3,1)"}).onfinish=function(){ s.remove(); };
-    })(); }
+    /* Purely decorative: it must never be able to stop the caller from
+       re-rendering. Older browsers (and WebViews) have no Element.animate, so
+       feature-detect and swallow anything that goes wrong here. */
+    try{
+      var probe=document.createElement("div");
+      if(typeof probe.animate!=="function") return;
+      var rect=btn.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+      for(var i=0;i<9;i++){ (function(){ var s=document.createElement("div"); s.className="pop"; s.textContent="⭐";
+        s.style.left=cx+"px"; s.style.top=cy+"px"; document.body.appendChild(s);
+        var ang=(Math.random()*Math.PI)-Math.PI,dist=60+Math.random()*70,dx=Math.cos(ang)*dist,dy=-Math.abs(Math.sin(ang)*dist)-30-Math.random()*40;
+        s.animate([{transform:"translate(-50%,-50%) scale(.4) rotate(0deg)",opacity:1},{transform:"translate("+dx+"px,"+dy+"px) scale(1.1) rotate("+(Math.random()*360)+"deg)",opacity:0}],{duration:750+Math.random()*250,easing:"cubic-bezier(.2,.7,.3,1)"}).onfinish=function(){ s.remove(); };
+      })(); }
+    }catch(e){}
   }
 
   /* ================= CONTROLS ================= */
@@ -555,7 +738,7 @@
       '<input type="text" id="sheetInput" placeholder="'+(o.placeholder||'')+'">'+
       '<div class="actions"><button class="btn ghost" id="sheetCancel">Cancel</button><button class="btn primary" id="sheetOk">'+(o.confirmLabel||'Save')+'</button></div>';
     overlay.classList.add("show");
-    var inp=document.getElementById("sheetInput"); inp.value=o.value||""; setTimeout(function(){inp.focus();},80);
+    var inp=document.getElementById("sheetInput"); inp.value=o.value||""; setTimeout(function(){ try{ inp.focus(); }catch(e){} },80);
     function submit(){ var v=inp.value.trim(); if(!v){inp.focus();return;} closeModal(); o.onConfirm(v); }
     document.getElementById("sheetOk").addEventListener("click",submit);
     inp.addEventListener("keydown",function(e){ if(e.key==="Enter") submit(); });
@@ -587,7 +770,7 @@
     document.getElementById("kidCancel").addEventListener("click",closeModal);
     document.getElementById("kidOk").addEventListener("click",function(){ var name=document.getElementById("kidNameInput").value.trim(); if(!name){ document.getElementById("kidNameInput").focus(); return; } closeModal(); o.onConfirm({name:name,emoji:chosen.emoji,color:chosen.color,soft:softFor(chosen.color)}); });
     if(o.onDelete) document.getElementById("kidDelete").addEventListener("click",function(){ closeModal(); o.onDelete(); });
-    setTimeout(function(){ document.getElementById("kidNameInput").focus(); },80);
+    setTimeout(function(){ var el=document.getElementById("kidNameInput"); if(el) el.focus(); },80);
   }
   function openAddKid(){ kidSheet({title:"Add a kid",confirmLabel:"Add kid",onConfirm:function(v){
     var k={id:kidId(),name:v.name,emoji:v.emoji,color:v.color,soft:v.soft};
@@ -621,14 +804,33 @@
   document.getElementById("syncBtn").addEventListener("click",openSyncSheet);
   function openSyncSheet(){
     if(syncOn()){
+      var others=otherDevices();
+      var fp=spaceFingerprint(cleanUrl(syncCfg.dbUrl),cleanCode(syncCfg.code));
+      var phonesHTML;
+      if(others.length){
+        phonesHTML='<div class="dev-list"><div class="dev"><span>📱 '+escapeHtml(device.name)+' <em>(this phone)</em></span><b>active now</b></div>'+
+          others.map(function(d){ return '<div class="dev"><span>📱 '+escapeHtml(d.name)+'</span><b>'+agoText(d.age)+'</b></div>'; }).join("")+'</div>';
+      } else {
+        phonesHTML='<div class="warnbox"><b>⚠ No other phone is on this space</b>'+
+          '<p>Only this phone has ever connected here. If the other phone also says it is synced, the two are on <b>different</b> spaces — compare the Space ID below on both phones. They must match exactly.</p></div>'+
+          '<div class="dev-list"><div class="dev"><span>📱 '+escapeHtml(device.name)+' <em>(this phone)</em></span><b>active now</b></div></div>';
+      }
       sheet.innerHTML='<h3>Sharing is on</h3>'+
-        '<p>This phone is syncing live. Anything you or the other phone changes shows up within a few seconds.</p>'+
+        '<div class="fp-box"><span class="fp-label">Space ID</span><span class="fp" id="shFp">'+fp+'</span>'+
+          '<span class="fp-note">Both phones must show these same 4 characters.</span></div>'+
+        '<p class="grid-label">Phones on this space</p>'+phonesHTML+
         '<div class="share-box"><b>Share these with the other phone</b><div class="v" id="shDb"></div><b>Space code</b><div class="v" id="shCode" style="margin-bottom:0"></div></div>'+
-        '<p class="disc">On the other phone: open this same app, tap the status button up top, choose “Set up sharing”, and enter exactly these two values.</p>'+
-        '<div class="actions col"><button class="btn ghost" id="syncCopy">Copy details to share</button><button class="btn warn" id="syncOff">Turn off sharing on this phone</button><button class="btn ghost" id="syncClose">Close</button></div>';
+        '<p class="disc">On the other phone: open this same app, tap the status button up top, choose “Set up sharing”, and enter exactly these two values. The space code is <b>case-sensitive</b> — “Ruhaan” and “ruhaan” are two different spaces.</p>'+
+        '<label class="fld">Name this phone (so you can tell them apart)</label><input type="text" id="devName" maxlength="24">'+
+        '<div class="actions col"><button class="btn ghost" id="devSave">Save phone name</button><button class="btn ghost" id="syncCopy">Copy details to share</button><button class="btn warn" id="syncOff">Turn off sharing on this phone</button><button class="btn ghost" id="syncClose">Close</button></div>';
       overlay.classList.add("show");
       document.getElementById("shDb").textContent=cleanUrl(syncCfg.dbUrl);
       document.getElementById("shCode").textContent=cleanCode(syncCfg.code);
+      document.getElementById("devName").value=device.name;
+      document.getElementById("devSave").addEventListener("click",function(){
+        var v=document.getElementById("devName").value.trim();
+        if(!v) return; device.name=v; saveDevice(); beat(true).then(function(){ toast("Phone name saved"); });
+      });
       document.getElementById("syncClose").addEventListener("click",closeModal);
       document.getElementById("syncCopy").addEventListener("click",function(){
         var txt="Attendance app sync\nDatabase URL: "+cleanUrl(syncCfg.dbUrl)+"\nSpace code: "+cleanCode(syncCfg.code);
@@ -652,12 +854,22 @@
           '</ol></div>'+
         '<label class="fld">Firebase database URL</label><input type="text" id="syncUrl" placeholder="https://your-project-default-rtdb.firebaseio.com">'+
         '<label class="fld">Space code (shared secret)</label><input type="text" id="syncCode" placeholder="e.g. sharma-family-7">'+
+        '<div class="fp-box" id="fpPreview" style="display:none"><span class="fp-label">Space ID</span><span class="fp" id="fpVal">····</span>'+
+          '<span class="fp-note">Check this matches on both phones. The code is <b>case-sensitive</b> — all lowercase is safest.</span></div>'+
         '<div class="result" id="syncResult"></div>'+
         '<p class="disc">Anyone who has both the URL and the space code can see this data, so keep the code private. It’s stored in your own Firebase, not on Anthropic’s servers.</p>'+
         '<div class="actions"><button class="btn ghost" id="syncTest">Test connection</button><button class="btn primary" id="syncGo">Turn on sync</button></div>'+
         '<div class="actions" style="margin-top:10px;"><button class="btn ghost" id="syncClose2">Cancel</button></div>';
       overlay.classList.add("show");
       document.getElementById("syncClose2").addEventListener("click",closeModal);
+      var uIn=document.getElementById("syncUrl"), cIn=document.getElementById("syncCode");
+      var fpBox=document.getElementById("fpPreview"), fpVal=document.getElementById("fpVal");
+      function updateFp(){
+        var u=cleanUrl(uIn.value), c=cleanCode(cIn.value);
+        if(u&&c){ fpBox.style.display="block"; fpVal.textContent=spaceFingerprint(u,c); }
+        else fpBox.style.display="none";
+      }
+      uIn.addEventListener("input",updateFp); cIn.addEventListener("input",updateFp);
       document.getElementById("syncTest").addEventListener("click",function(){
         var url=cleanUrl(document.getElementById("syncUrl").value), code=cleanCode(document.getElementById("syncCode").value);
         var res=document.getElementById("syncResult");
@@ -679,20 +891,64 @@
       });
     }
   }
+  function countTreeDays(tree){
+    var n=0, rec=(tree&&tree.records)||{};
+    Object.keys(rec).forEach(function(k){ Object.keys(rec[k]||{}).forEach(function(c){
+      var days=rec[k][c]||{}; for(var d in days){ if(days[d]) n++; } }); });
+    return n;
+  }
+  function joinSheet(cfg,tree){
+    var localDays=countTreeDays(localTree), sharedDays=countTreeDays(tree);
+    var localKids=Object.keys((localTree&&localTree.meta&&localTree.meta.kids)||{}).length;
+    var sharedKids=Object.keys((tree&&tree.meta&&tree.meta.kids)||{}).length;
+    sheet.innerHTML='<h3>This space already has data</h3>'+
+      '<p>Choose what happens to the marks currently on this phone.</p>'+
+      '<div class="share-box"><b>On this phone</b><div class="v">'+localKids+' kid'+(localKids===1?'':'s')+' · '+localDays+' marked day'+(localDays===1?'':'s')+'</div>'+
+      '<b>In the shared space</b><div class="v" style="margin-bottom:0">'+sharedKids+' kid'+(sharedKids===1?'':'s')+' · '+sharedDays+' marked day'+(sharedDays===1?'':'s')+'</div></div>'+
+      '<p class="disc">Merging keeps every marked day from both sides. Kids and classes with the same name are treated as the same kid or class, so you won\'t get duplicates. Where a name, animal or colour disagree, the shared space wins.</p>'+
+      '<div class="actions col">'+
+        '<button class="btn primary" id="joinMerge">Merge both (recommended)</button>'+
+        '<button class="btn ghost" id="joinTake">Use shared copy, discard this phone\'s</button>'+
+        '<button class="btn ghost" id="joinCancel">Cancel</button>'+
+      '</div>';
+    overlay.classList.add("show");
+    function finish(newTree,push,msg){
+      syncCfg=cfg; saveSync(); queue=[]; saveQueue();
+      localTree=newTree; rebuildState(); saveLocal();
+      closeModal(); startPolling(); render();
+      var done=function(){ setStatus("synced"); beat(true).then(renderStatus); };
+      if(push){
+        apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+          .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+          .then(done,function(){ setStatus("offline"); });
+      } else done();
+      toast(msg);
+    }
+    document.getElementById("joinMerge").addEventListener("click",function(){
+      finish(mergeTrees(localTree,{meta:tree.meta,records:tree.records||{}}),true,"Merged and sharing ⭐");
+    });
+    document.getElementById("joinTake").addEventListener("click",function(){
+      finish({meta:tree.meta,records:tree.records||{}},false,"Joined shared space ⭐");
+    });
+    document.getElementById("joinCancel").addEventListener("click",function(){
+      closeModal(); setStatus(syncOn()?"synced":"local");
+    });
+  }
   function connect(url,code){
     var cfg={dbUrl:url,code:code};
     setStatus("syncing");
     apiGet("",cfg).then(function(tree){
-      if(tree===null){
-        return apiSend({method:"PUT",path:"",body:localTree||{meta:{kids:{}},records:{}}},cfg).then(function(){
-          syncCfg=cfg; saveSync(); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render(); toast("Sync on — shared space created ⭐");
-        });
+      if(!treeHasKids(tree)){
+        return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)},cfg)
+          .then(function(){ return apiSend({method:"PUT",path:"records",body:(localTree&&localTree.records)||{}},cfg); })
+          .then(function(){
+            syncCfg=cfg; saveSync(); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render();
+            beat(true).then(renderStatus);
+            toast("Sync on — shared space created ⭐");
+          });
       } else {
-        closeModal();
-        confirmSheet({title:"Join this shared space?",confirmLabel:"Join & use shared data",
-          desc:"This space already has data. This phone will switch to the shared copy — its current on-phone data will be replaced. Tip: use Back up first if you're unsure.",
-          onConfirm:function(){ syncCfg=cfg; saveSync(); queue=[]; saveQueue(); localTree=tree; rebuildState(); saveLocal(); startPolling(); setStatus("synced"); render(); toast("Joined shared space ⭐"); },
-          onCancel:function(){ setStatus(syncOn()?"synced":"local"); }});
+        remoteDevices=(tree&&tree.devices)||{};
+        closeModal(); joinSheet(cfg,tree);
       }
     }).catch(function(e){
       var res=document.getElementById("syncResult");
@@ -718,7 +974,10 @@
       confirmSheet({title:"Restore this backup?",desc:"It has "+kids.length+" kid"+(kids.length===1?"":"s")+". This replaces everything currently "+(syncOn()?"in the shared space":"on this phone")+".",confirmLabel:"Restore",
         onConfirm:function(){
           localTree=stateToTree({kids:kids}); rebuildState(); saveLocal(); render();
-          if(syncOn()){ queue=[]; saveQueue(); apiSend({method:"PUT",path:"",body:localTree}).then(function(){ setStatus("synced"); },function(){ setStatus("offline"); }); }
+          if(syncOn()){ queue=[]; saveQueue();
+            apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+              .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+              .then(function(){ setStatus("synced"); beat(true); },function(){ setStatus("offline"); }); }
           toast("Backup restored");
         }});
     };
@@ -731,10 +990,10 @@
 
   /* ================= BOOT ================= */
   loadLocal(); render();
-  if(syncOn()){ setStatus("syncing"); startPolling(); pull(); }
-  document.addEventListener("visibilitychange",function(){ if(!document.hidden) pull(); });
+  if(syncOn()){ setStatus("syncing"); startPolling(); beat(true); pull(); }
+  document.addEventListener("visibilitychange",function(){ if(!document.hidden){ beat(true); pull(); } });
   window.addEventListener("focus",pull);
-  window.addEventListener("online",function(){ scheduleFlush(); pull(); });
+  window.addEventListener("online",function(){ scheduleFlush(); beat(true); pull(); });
 })();
 </script>
 </body>
