@@ -137,6 +137,37 @@ function spaceFingerprint(dbUrl,code){
   return (("0000"+h.toString(36).toUpperCase()).slice(-4));
 }
 
+  /* How much would this phone LOSE by adopting `remote`?
+     Counts leaves (kid -> class -> day) present locally and absent remotely,
+     plus kids that vanish entirely. Deliberately asymmetric: gains are ignored,
+     because gaining a day from the other phone is the normal, safe case.
+     pull() uses this to hold back a destructive adoption instead of applying it
+     silently, which is what allowed one accidental delete (or one wrong space
+     code) to wipe every phone within a single poll. */
+  function adoptionLoss(local,remote){
+    var lk=(local&&local.meta&&local.meta.kids)||{}, rk=(remote&&remote.meta&&remote.meta.kids)||{};
+    var lr=(local&&local.records)||{}, rr=(remote&&remote.records)||{};
+    var kidsLost=0, daysLost=0;
+    Object.keys(lk).forEach(function(kid){ if(!rk[kid]) kidsLost++; });
+    Object.keys(lr).forEach(function(kid){
+      var cls=lr[kid]||{};
+      Object.keys(cls).forEach(function(c){
+        var days=cls[c]||{};
+        Object.keys(days).forEach(function(d){
+          if(!days[d]) return;
+          if(!(rr[kid]&&rr[kid][c]&&rr[kid][c][d])) daysLost++;
+        });
+      });
+    });
+    return {kidsLost:kidsLost,daysLost:daysLost};
+  }
+  /* A single day unmarked on the other phone must NOT prompt, or the prompt
+     becomes noise and gets dismissed reflexively. Losing a whole kid always
+     prompts; losing days only past a threshold. */
+  function lossNeedsConsent(loss){
+    return !!loss && (loss.kidsLost>0 || loss.daysLost>=5);
+  }
+
 /* ===== TEST HARNESS ===== */
 var pass=0, fail=0;
 function eq(a,b,msg){ var A=JSON.stringify(a),B=JSON.stringify(b); if(A===B){pass++;} else {fail++; console.log("FAIL: "+msg+"\n  got : "+A+"\n  want: "+B);} }
@@ -357,6 +388,55 @@ ok(mg3.kids[0].classes[0].records["2026-05-05"]===true,"records merged across th
                             "\n    test file  : "+(B[i]===undefined?"(missing)":B[i]));
     }
   }
+})();
+
+/* ===== adoptionLoss / lossNeedsConsent =====
+   These gate the "the shared space wants to remove data" prompt. Getting the
+   threshold wrong in either direction is harmful: too eager and the owner is
+   prompted every time the other phone unmarks a day and learns to tap through
+   it; too lax and a wipe lands silently, which is the bug this exists to fix. */
+(function(){
+  function T(kids,recs){ return {meta:{kids:kids||{}},records:recs||{}}; }
+  var K={k1:{name:"Ruhaan",classes:{c1:{name:"Phonics"}}}};
+  var K2={k1:K.k1,k2:{name:"Second",classes:{}}};
+
+  eq(adoptionLoss(T(K,{k1:{c1:{"2026-07-01":true}}}),T(K,{k1:{c1:{"2026-07-01":true}}})),
+     {kidsLost:0,daysLost:0},"identical trees lose nothing");
+
+  eq(adoptionLoss(T(K,{k1:{c1:{"2026-07-01":true}}}),T(K,{k1:{c1:{"2026-07-01":true,"2026-07-02":true}}})),
+     {kidsLost:0,daysLost:0},"a day GAINED from the other phone is not a loss");
+
+  eq(adoptionLoss(T(K,{k1:{c1:{"2026-07-01":true,"2026-07-02":true}}}),T(K,{k1:{c1:{"2026-07-01":true}}})),
+     {kidsLost:0,daysLost:1},"one day unmarked elsewhere counts as one lost day");
+
+  ok(!lossNeedsConsent(adoptionLoss(T(K,{k1:{c1:{"2026-07-01":true,"2026-07-02":true}}}),
+                                    T(K,{k1:{c1:{"2026-07-01":true}}}))),
+     "a single unmarked day must NOT prompt");
+
+  var many={k1:{c1:{}}}, fewer={k1:{c1:{}}};
+  for(var i=1;i<=11;i++){ many.k1.c1["2026-07-"+("0"+i).slice(-2)]=true; }
+  fewer.k1.c1["2026-07-01"]=true;
+  eq(adoptionLoss(T(K,many),T(K,fewer)).daysLost,10,"ten days removed are all counted");
+  ok(lossNeedsConsent(adoptionLoss(T(K,many),T(K,fewer))),"a mass removal must prompt");
+
+  /* the exact shape of the real-world failure: seeded space, all kids gone */
+  var wiped={meta:{seeded:true,kids:{}},records:{}};
+  eq(adoptionLoss(T(K,many),wiped),{kidsLost:1,daysLost:11},"emptied seeded space loses the kid and every day");
+  ok(lossNeedsConsent(adoptionLoss(T(K,many),wiped)),"an emptied seeded space must prompt");
+
+  /* losing a kid always prompts, even with no attendance at stake */
+  eq(adoptionLoss(T(K2,{}),T(K,{})),{kidsLost:1,daysLost:0},"a deleted kid is counted with no records");
+  ok(lossNeedsConsent({kidsLost:1,daysLost:0}),"losing a kid prompts even at zero days");
+  ok(!lossNeedsConsent({kidsLost:0,daysLost:4}),"four days is under the threshold");
+  ok(lossNeedsConsent({kidsLost:0,daysLost:5}),"five days reaches the threshold");
+
+  /* robustness: the real caller can pass null/empty on a fresh phone */
+  eq(adoptionLoss(null,null),{kidsLost:0,daysLost:0},"null trees are safe");
+  eq(adoptionLoss({},{}),{kidsLost:0,daysLost:0},"empty objects are safe");
+  eq(adoptionLoss(T(K,{k1:{c1:{"2026-07-01":true}}}),null),{kidsLost:1,daysLost:1},"adopting null loses everything");
+  ok(!lossNeedsConsent(null),"a null loss does not prompt");
+  /* falsy leaves are absences, not marks */
+  eq(adoptionLoss(T(K,{k1:{c1:{"2026-07-01":false}}}),T(K,{})),{kidsLost:0,daysLost:0},"an unmarked leaf is not a loss");
 })();
 
 console.log("\n"+pass+" passed, "+fail+" failed");

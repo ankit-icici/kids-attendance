@@ -49,6 +49,8 @@
   .fp-note{display:block;font-size:12px;color:var(--ink-soft);line-height:1.45;}
   .dev-list{margin:6px 0 12px;}
   .dev{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:2px solid var(--line);border-radius:12px;margin-bottom:6px;font-size:13px;}
+  .dev-x{margin-left:8px;border:0;background:transparent;color:var(--ink-soft);font-size:15px;line-height:1;padding:2px 4px;cursor:pointer;border-radius:6px;}
+  .dev-x:hover,.dev-x:focus{background:var(--line);color:var(--danger);}
   .dev em{font-style:normal;color:var(--ink-soft);font-size:12px;}
   .dev b{font-size:12px;font-weight:800;color:var(--ink-soft);white-space:nowrap;}
   .pill.denied{color:var(--danger);border-color:var(--danger);} .pill.denied .dot{background:var(--danger);animation:blink 1s infinite;}
@@ -250,8 +252,10 @@
       <button class="tool-btn" id="exportBtn">⬇ Back up</button>
       <button class="tool-btn" id="importBtn">⬆ Restore</button>
     </div>
+    <button class="tool-btn" id="undoBtn" style="flex:none;display:none;">↩ Undo the last replace</button>
     <p>Data is stored on this phone. Turn on sharing to sync live with another phone, and back up now and then so nothing is ever lost.</p>
     <p class="backup-note" id="backupNote"></p>
+    <p class="backup-note" id="storageNote"></p>
     <p class="verline">Attendance Star Chart <span id="verText"></span> · works offline · your data stays on your phone</p>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none">
   </div>
@@ -401,8 +405,39 @@
     return (("0000"+h.toString(36).toUpperCase()).slice(-4));
   }
 
+  /* How much would this phone LOSE by adopting `remote`?
+     Counts leaves (kid -> class -> day) present locally and absent remotely,
+     plus kids that vanish entirely. Deliberately asymmetric: gains are ignored,
+     because gaining a day from the other phone is the normal, safe case.
+     pull() uses this to hold back a destructive adoption instead of applying it
+     silently, which is what allowed one accidental delete (or one wrong space
+     code) to wipe every phone within a single poll. */
+  function adoptionLoss(local,remote){
+    var lk=(local&&local.meta&&local.meta.kids)||{}, rk=(remote&&remote.meta&&remote.meta.kids)||{};
+    var lr=(local&&local.records)||{}, rr=(remote&&remote.records)||{};
+    var kidsLost=0, daysLost=0;
+    Object.keys(lk).forEach(function(kid){ if(!rk[kid]) kidsLost++; });
+    Object.keys(lr).forEach(function(kid){
+      var cls=lr[kid]||{};
+      Object.keys(cls).forEach(function(c){
+        var days=cls[c]||{};
+        Object.keys(days).forEach(function(d){
+          if(!days[d]) return;
+          if(!(rr[kid]&&rr[kid][c]&&rr[kid][c][d])) daysLost++;
+        });
+      });
+    });
+    return {kidsLost:kidsLost,daysLost:daysLost};
+  }
+  /* A single day unmarked on the other phone must NOT prompt, or the prompt
+     becomes noise and gets dismissed reflexively. Losing a whole kid always
+     prompts; losing days only past a threshold. */
+  function lossNeedsConsent(loss){
+    return !!loss && (loss.kidsLost>0 || loss.daysLost>=5);
+  }
+
   /* ================= CONSTANTS ================= */
-  var APP_VERSION="v6";
+  var APP_VERSION="v7";
   var PALETTE=[
     {name:"Grape",c:"#7A5CF0",soft:"#EEE9FE"},{name:"Berry",c:"#E85D9A",soft:"#FCE7F1"},
     {name:"Tangerine",c:"#F58A3C",soft:"#FDECDD"},{name:"Grass",c:"#3BAF5A",soft:"#E4F6EA"},
@@ -411,7 +446,10 @@
   ];
   var EMOJIS=["🦄","🐶","🐱","🦖","🐰","🐼","🦊","🐸","🦁","🐵","🐧","🐢","🐨","🐷","🌟","🚀"];
 
-  var K_TREE="att.tree.v3", K_UI="att.ui.v3", K_SYNC="att.sync.v3", K_QUEUE="att.queue.v3", K_DEV="att.device.v3", K_BAK="att.backup.v3";
+  var K_TREE="att.tree.v3", K_UI="att.ui.v3", K_SYNC="att.sync.v3", K_QUEUE="att.queue.v3", K_DEV="att.device.v3", K_BAK="att.backup.v3",
+      K_TRASH="att.trash.v3", K_CODES="att.codes.v3";
+  var TRASH_KEEP_DAYS=14;     /* how long an undo snapshot stays offered */
+  var STALE_DEV_DAYS=30;      /* a phone unseen this long is hidden from the list */
 
   /* ================= LOCAL DATA ================= */
   var localTree={meta:{kids:{}},records:{}};
@@ -423,26 +461,49 @@
 
   function saveLocal(){ try{ localStorage.setItem(K_TREE,JSON.stringify(localTree)); localStorage.setItem(K_UI,JSON.stringify(ui)); }catch(e){} }
   function rebuildState(){ state=treeToState(localTree, ui.activeKidId); ui.activeKidId=state.activeKidId; }
+
+  /* Read and parse ONE key in isolation.
+     This used to be a single try/catch wrapped around the whole load. One
+     unparseable value therefore aborted everything after it — including the
+     sync config, which is why a corrupt tree presented as "On this phone" with
+     no explanation — and then the saveLocal() at the end of the load wrote an
+     empty tree straight over the data it had failed to read. Now every key
+     stands or falls alone, and anything unreadable is copied aside under
+     "<key>.corrupt.<ts>" instead of being destroyed. */
+  var loadFailures=[];
+  function readJSON(key){
+    var raw=null;
+    try{ raw=localStorage.getItem(key); }catch(e){ return null; }
+    if(raw===null||raw===undefined||raw==="") return null;
+    try{ return JSON.parse(raw); }
+    catch(e){
+      loadFailures.push(key);
+      try{ localStorage.setItem(key+".corrupt."+Date.now(),raw); }catch(e2){}
+      return null;
+    }
+  }
+  var treeUnreadable=false;
   function loadLocal(){
-    try{
-      var t=localStorage.getItem(K_TREE);
-      if(t){ localTree=JSON.parse(t); }
-      else{
-        var v2=localStorage.getItem("attendance.register.v2");
-        var v1=localStorage.getItem("attendance.register.v1");
-        if(v2){ var d2=JSON.parse(v2); localTree=stateToTree({kids:d2.kids||[]}); ui.activeKidId=d2.activeKidId||null; }
-        else if(v1){ var d1=JSON.parse(v1); var p=PALETTE[0];
-          localTree=stateToTree({kids:[{id:"k"+Date.now(),name:d1.name||"My kid",emoji:"🌟",color:p.c,soft:p.soft,classes:d1.classes||[]}]}); }
-      }
-      var u=localStorage.getItem(K_UI); if(u){ var uu=JSON.parse(u); if(uu&&uu.activeKidId) ui.activeKidId=uu.activeKidId; }
-      var sc=localStorage.getItem(K_SYNC); if(sc){ syncCfg=JSON.parse(sc); }
-      var q=localStorage.getItem(K_QUEUE); if(q){ queue=JSON.parse(q)||[]; }
-      var dv=localStorage.getItem(K_DEV); if(dv){ device=JSON.parse(dv); }
-    }catch(e){}
+    var t=readJSON(K_TREE);
+    if(t&&typeof t==='object'){ localTree=t; }
+    else{
+      if(loadFailures.indexOf(K_TREE)>=0) treeUnreadable=true;
+      var d2=readJSON("attendance.register.v2");
+      var d1=readJSON("attendance.register.v1");
+      if(d2){ localTree=stateToTree({kids:d2.kids||[]}); ui.activeKidId=d2.activeKidId||null; }
+      else if(d1){ var p=PALETTE[0];
+        localTree=stateToTree({kids:[{id:"k"+Date.now(),name:d1.name||"My kid",emoji:"🌟",color:p.c,soft:p.soft,classes:d1.classes||[]}]}); }
+    }
+    var uu=readJSON(K_UI); if(uu&&uu.activeKidId) ui.activeKidId=uu.activeKidId;
+    var sc=readJSON(K_SYNC); if(sc&&sc.dbUrl&&sc.code) syncCfg=sc;
+    var q=readJSON(K_QUEUE); if(q&&typeof q.length==="number") queue=q;
+    var dv=readJSON(K_DEV); if(dv&&dv.id) device=dv;
     if(!device||!device.id){ device={id:newDeviceId(),name:guessDeviceName()}; saveDevice(); }
     if(!localTree||typeof localTree!=='object') localTree={meta:{kids:{}},records:{}};
     rebuildState();
-    saveLocal();
+    /* Never write over a tree we could not read. Persist only the UI hint. */
+    if(treeUnreadable){ try{ localStorage.setItem(K_UI,JSON.stringify(ui)); }catch(e){} }
+    else saveLocal();
   }
   function kidId(){ return "k"+Date.now()+Math.floor(Math.random()*9999); }
   function classId(){ return "c"+Date.now()+Math.floor(Math.random()*9999); }
@@ -455,8 +516,27 @@
     if(syncOn()){ ops.forEach(function(op){ queue.push(op); }); saveQueue(); scheduleFlush(); }
   }
 
+  /* ================= UNDO SNAPSHOT ================= */
+  /* One Firebase space is not a backup, and adopting a remote tree is
+     destructive: whatever this phone held is gone the instant saveLocal() runs.
+     Before any adoption that LOSES data we stash the outgoing tree here, so a
+     wipe is recoverable on the phone itself without a backup file. */
+  function saveTrash(tree,reason){
+    try{ localStorage.setItem(K_TRASH,JSON.stringify({ts:Date.now(),reason:reason||"",tree:tree})); }catch(e){}
+  }
+  function readTrash(){
+    var t=readJSON(K_TRASH);
+    if(!t||!t.tree||!t.ts) return null;
+    if((Date.now()-t.ts)>TRASH_KEEP_DAYS*86400000) return null;
+    if(!treeHasKids(t.tree)) return null;
+    return t;
+  }
+  function clearTrash(){ try{ localStorage.removeItem(K_TRASH); }catch(e){} }
+
   /* ================= SYNC ================= */
   var syncCfg=null, queue=[], flushing=false, pulling=false, pollTimer=null, status="local";
+  var pendingAdopt=null;   /* a remote tree held back awaiting the owner's decision */
+  var justRestored=false;  /* session flag: show the undo banner */
   function syncOn(){ return !!(syncCfg&&syncCfg.dbUrl&&syncCfg.code); }
 
   /* ---- Who else is on this space? -------------------------------------------
@@ -550,6 +630,57 @@
   function renderBanner(){
     var b=document.getElementById("banner");
     if(!b) return;
+    /* Highest priority: a destructive change is waiting on a decision. */
+    if(pendingAdopt){
+      var L=pendingAdopt.loss;
+      var what=[];
+      if(L.kidsLost>0) what.push(L.kidsLost+" kid"+(L.kidsLost===1?"":"s"));
+      if(L.daysLost>0) what.push(L.daysLost+" marked day"+(L.daysLost===1?"":"s"));
+      b.className="banner show";
+      b.innerHTML='<b>⚠ The shared space wants to remove data</b>'+
+        '<p>The other phone\u2019s copy is missing <b>'+what.join(" and ")+'</b> that this phone has. '+
+        'Nothing has been changed here yet. If someone deleted these on purpose, accept it. '+
+        'If this is unexpected \u2014 a wrong space code, or an accidental delete \u2014 keep this phone\u2019s copy and it will be pushed back up.</p>'+
+        '<button class="btn ghost" id="bannerKeepMine">Keep this phone\u2019s copy</button>'+
+        '<button class="btn warn" id="bannerAccept">Accept the removal</button>';
+      document.getElementById("bannerKeepMine").addEventListener("click",function(){
+        var mine=localTree; pendingAdopt=null;
+        setStatus("syncing");
+        apiSend({method:"PUT",path:"meta",body:metaForWrite(mine)})
+          .then(function(){ return apiSend({method:"PUT",path:"records",body:mine.records||{}}); })
+          .then(bumpRev)
+          .then(function(){ lastRev=null; lastFull=0; startPolling(); setStatus("synced"); toast("This phone\u2019s copy kept and shared"); },
+                function(e){ startPolling(); setStatus(isDenied(e)?"denied":"offline"); });
+      });
+      document.getElementById("bannerAccept").addEventListener("click",function(){
+        var incoming=pendingAdopt.tree; pendingAdopt=null;
+        saveTrash(localTree,"removal accepted from the shared space");
+        localTree=incoming; rebuildState(); saveLocal(); render();
+        justRestored=true; lastRev=null; lastFull=0; startPolling(); setStatus("synced");
+        renderBackupNote(); renderUndoBtn(); toast("Change applied \u2014 undo is available below");
+      });
+      return;
+    }
+    if(treeUnreadable){
+      b.className="banner show";
+      b.innerHTML='<b>⚠ This phone\u2019s saved data could not be read</b>'+
+        '<p>The stored copy was damaged, so the app started empty. <b>It has not been overwritten</b> \u2014 the '+
+        'unreadable copy was kept aside. Restore from a backup file if you have one, or turn on sharing to pull '+
+        'your data back from the other phone.</p>'+
+        '<button class="btn ghost" id="bannerDismiss">Got it</button>';
+      document.getElementById("bannerDismiss").addEventListener("click",function(){ treeUnreadable=false; renderBanner(); });
+      return;
+    }
+    if(justRestored&&readTrash()){
+      b.className="banner show";
+      b.innerHTML='<b>Data on this phone was just replaced</b>'+
+        '<p>The copy from before the change was saved and can be put back.</p>'+
+        '<button class="btn primary" id="bannerUndo">Undo \u2014 put the old copy back</button>'+
+        '<button class="btn ghost" id="bannerUndoNo">Keep the change</button>';
+      document.getElementById("bannerUndo").addEventListener("click",function(){ undoLastReplace(); });
+      document.getElementById("bannerUndoNo").addEventListener("click",function(){ justRestored=false; renderBanner(); });
+      return;
+    }
     if(syncOn()&&status==="badurl"&&suggestedUrl){
       b.className="banner show";
       b.innerHTML='<b>⚠ Wrong database address</b>'+
@@ -572,6 +703,25 @@
         '<button class="btn ghost" id="bannerFix">Show me how to fix it</button>';
       document.getElementById("bannerFix").addEventListener("click",openRulesSheet);
     } else { b.className="banner"; b.innerHTML=""; }
+  }
+  /* Put the pre-change copy back, and push it up so the other phone follows.
+     A union with what is on the phone now, so anything marked since the wipe
+     is not thrown away by the undo itself. */
+  function undoLastReplace(){
+    var t=readTrash();
+    if(!t){ toast("Nothing to undo"); return; }
+    var restored=mergeTrees(localTree,t.tree);
+    localTree=restored; rebuildState(); saveLocal(); render();
+    clearTrash(); justRestored=false;
+    renderBanner(); renderBackupNote(); renderUndoBtn();
+    if(syncOn()){
+      setStatus("syncing");
+      apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+        .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+        .then(bumpRev)
+        .then(function(){ lastRev=null; lastFull=0; setStatus("synced"); toast("Old copy restored and shared"); },
+              function(e){ setStatus(isDenied(e)?"denied":"offline"); toast("Restored on this phone; will share when online"); });
+    } else toast("Old copy restored");
   }
   function rulesBlockHTML(title,intro){
     return '<div class="guide"><b>'+title+'</b><p>'+intro+'</p>'+
@@ -651,6 +801,7 @@
   }
   function pull(force){
     if(!syncOn()||pulling) return;
+    if(pendingAdopt) return;                                                   // waiting on the owner; don't re-ask every 4s
     if(document.getElementById("overlay").classList.contains("show")) return; // don't disrupt open dialogs
     if(queue.length){ scheduleFlush(); return; }
     pulling=true;
@@ -685,7 +836,21 @@
           }
           return;
         }
-        localTree={meta:tree.meta||{kids:{}},records:tree.records||{}};
+        var incoming={meta:tree.meta||{kids:{}},records:tree.records||{}};
+        /* An empty-but-seeded space is a deliberate deletion and used to be
+           adopted silently, which means one accidental delete — or one wrong
+           space code — wiped every phone within 4 seconds with no undo. A
+           wipe-level change is now held back and the owner decides. Normal
+           edits (a day marked or unmarked elsewhere) pass straight through. */
+        var loss=adoptionLoss(localTree,incoming);
+        if(lossNeedsConsent(loss)){
+          pendingAdopt={tree:incoming,loss:loss};
+          stopPolling();
+          renderBanner();
+          return;
+        }
+        if(loss.daysLost>0) saveTrash(localTree,"replaced by the shared space");
+        localTree=incoming;
         rebuildState(); saveLocal(); render();
         if(lastRev===null) return bumpRev();   // seed the marker for a legacy space
       });
@@ -952,9 +1117,25 @@
       var others=otherDevices();
       var fp=spaceFingerprint(cleanUrl(syncCfg.dbUrl),cleanCode(syncCfg.code));
       var phonesHTML;
+      /* Nothing ever pruned devices/, so every wipe, reinstall or new browser
+         left a permanent extra entry and the phone count drifted upward. The
+         count is a trust signal — an inflated one hides exactly the desync it
+         was added to expose — so entries can now be removed here instead of in
+         the Firebase console, and very old ones are folded away by default. */
+      var staleMs=STALE_DEV_DAYS*86400000;
+      var fresh=others.filter(function(d){ return d.age===null||d.age<staleMs; });
+      var stale=others.filter(function(d){ return d.age!==null&&d.age>=staleMs; });
+      function devRow(d){
+        return '<div class="dev"><span>📱 '+escapeHtml(d.name)+'</span><b>'+agoText(d.age)+
+               ' <button type="button" class="dev-x" data-id="'+escapeHtml(d.id)+'" title="Remove this phone">\u2715</button></b></div>';
+      }
       if(others.length){
         phonesHTML='<div class="dev-list"><div class="dev"><span>📱 '+escapeHtml(device.name)+' <em>(this phone)</em></span><b>active now</b></div>'+
-          others.map(function(d){ return '<div class="dev"><span>📱 '+escapeHtml(d.name)+'</span><b>'+agoText(d.age)+'</b></div>'; }).join("")+'</div>';
+          fresh.map(devRow).join("")+'</div>'+
+          (stale.length?'<p class="disc">'+stale.length+' phone'+(stale.length===1?'':'s')+' not seen in over '+STALE_DEV_DAYS+
+            ' days '+(stale.length===1?'is':'are')+' hidden. <a href="#" id="showStale">Show '+(stale.length===1?'it':'them')+'</a></p>'+
+            '<div class="dev-list" id="staleList" style="display:none">'+stale.map(devRow).join("")+'</div>':'')+
+          '<p class="disc">If a phone here is one you no longer use \u2014 or the same phone before it was wiped or reinstalled \u2014 remove it with \u2715 so the phone count stays truthful. Removing one only clears its last-seen marker; no attendance data is touched.</p>';
       } else {
         phonesHTML='<div class="warnbox"><b>⚠ No other phone is on this space</b>'+
           '<p>Only this phone has ever connected here. If the other phone also says it is synced, the two are on <b>different</b> spaces — compare the Space ID below on both phones. They must match exactly.</p></div>'+
@@ -977,6 +1158,26 @@
         if(!v) return; device.name=v; saveDevice(); beat(true).then(function(){ toast("Phone name saved"); });
       });
       document.getElementById("syncClose").addEventListener("click",closeModal);
+      var showStale=document.getElementById("showStale");
+      if(showStale) showStale.addEventListener("click",function(ev){
+        ev.preventDefault();
+        var l=document.getElementById("staleList"); if(l) l.style.display="";
+        showStale.parentNode.style.display="none";
+      });
+      Array.prototype.forEach.call(sheet.querySelectorAll(".dev-x"),function(btn){
+        btn.addEventListener("click",function(){
+          var id=btn.getAttribute("data-id");
+          var name=(remoteDevices[id]&&remoteDevices[id].name)||"that phone";
+          closeModal();
+          confirmSheet({title:"Remove "+name+"?",danger:true,confirmLabel:"Remove",
+            desc:"This clears its last-seen marker from the shared space. No kid, class or attendance data is affected. If that phone is still in use it will reappear the next time it opens the app.",
+            onConfirm:function(){
+              apiSend({method:"DELETE",path:"devices/"+encodeURIComponent(id)})
+                .then(function(){ delete remoteDevices[id]; renderStatus(); toast("Phone removed"); },
+                      function(){ toast("Couldn\u2019t remove it \u2014 check the connection"); });
+            }});
+        });
+      });
       document.getElementById("rulesOpen").addEventListener("click",function(){ closeModal(); openRulesSheet(); });
       document.getElementById("syncCopy").addEventListener("click",function(){
         var txt="Attendance app sync\nDatabase URL: "+cleanUrl(syncCfg.dbUrl)+"\nSpace code: "+cleanCode(syncCfg.code);
@@ -1074,7 +1275,7 @@
       '</div>';
     overlay.classList.add("show");
     function finish(newTree,push,msg){
-      syncCfg=cfg; saveSync(); queue=[]; saveQueue();
+      syncCfg=cfg; saveSync(); rememberCode(cfg.code); queue=[]; saveQueue();
       localTree=newTree; rebuildState(); saveLocal();
       closeModal(); startPolling(); render();
       var done=function(){ setStatus("synced"); beat(true).then(renderStatus); };
@@ -1096,20 +1297,63 @@
       closeModal(); setStatus(syncOn()?"synced":"local");
     });
   }
+  /* Space codes this phone has used before.
+     The database rules deliberately forbid listing /spaces, so the app cannot
+     discover that two spaces differ only by capitalisation — that would need
+     read access to the root, which is the one thing the rules exist to deny.
+     What it CAN do is remember the codes used here and catch the retype, which
+     is how the near-duplicate gets created in the first place. */
+  function knownCodes(){ var v=readJSON(K_CODES); return (v&&typeof v.length==="number")?v:[]; }
+  function rememberCode(code){
+    var list=knownCodes(), c=cleanCode(code);
+    if(!c) return;
+    if(list.indexOf(c)<0){ list.push(c); if(list.length>12) list=list.slice(-12);
+      try{ localStorage.setItem(K_CODES,JSON.stringify(list)); }catch(e){} }
+  }
+  function codeCaseClash(code){
+    var c=cleanCode(code), lc=c.toLowerCase(), hit=null;
+    knownCodes().forEach(function(k){ if(k!==c&&k.toLowerCase()===lc) hit=k; });
+    return hit;
+  }
   function connect(url,code){
+    var clash=codeCaseClash(code);
+    if(clash){
+      confirmSheet({title:"That code looks like a near-miss",danger:true,confirmLabel:"Use it anyway",
+        desc:"This phone has used \u201C"+clash+"\u201D before, which differs from what you typed only in capitalisation. "+
+             "Space codes are case-sensitive, so these are two completely separate spaces \u2014 joining the wrong one looks "+
+             "like your data has vanished. Check the other phone\u2019s Space ID before continuing.",
+        onConfirm:function(){ doConnect(url,code); }});
+      return;
+    }
+    doConnect(url,code);
+  }
+  function doConnect(url,code){
     var cfg={dbUrl:url,code:code};
     setStatus("syncing");
     apiGet("",cfg).then(function(tree){
       if(!treeHasKids(tree)){
-        return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)},cfg)
-          .then(function(){ return apiSend({method:"PUT",path:"records",body:(localTree&&localTree.records)||{}},cfg); })
-          .then(function(){ return apiSend({method:"PUT",path:"rev",body:{".sv":"timestamp"}},cfg); })
-          .then(function(){
-            syncCfg=cfg; saveSync(); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render();
-            lastRev=null; lastFull=0;
-            beat(true).then(renderStatus);
-            toast("Sync on — shared space created ⭐");
-          });
+        /* This branch used to fire silently and report "shared space created",
+           so a mistyped code produced a cheerful success message and an empty
+           app that believed it was synced. It now says what it is about to do. */
+        var localKids=Object.keys((localTree&&localTree.meta&&localTree.meta.kids)||{}).length;
+        setStatus(syncOn()?"synced":"local");
+        confirmSheet({title:"Nothing is stored at that code",confirmLabel:"Create it",
+          desc:"No kids were found there, so this would start a brand-new empty space and put "+
+               (localKids?("this phone\u2019s "+localKids+" kid"+(localKids===1?"":"s")+" into it."):"nothing into it.")+
+               " If you expected to join the other phone, close this and check the address and the code \u2014 the code is case-sensitive.",
+          onConfirm:function(){
+            setStatus("syncing");
+            apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)},cfg)
+              .then(function(){ return apiSend({method:"PUT",path:"records",body:(localTree&&localTree.records)||{}},cfg); })
+              .then(function(){ return apiSend({method:"PUT",path:"rev",body:{".sv":"timestamp"}},cfg); })
+              .then(function(){
+                syncCfg=cfg; saveSync(); rememberCode(cfg.code); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render();
+                lastRev=null; lastFull=0;
+                beat(true).then(renderStatus);
+                toast("Sync on — new empty space created");
+              },function(e){ setStatus(isDenied(e)?"denied":"offline"); toast("Couldn\u2019t create the space"); });
+          }});
+        return null;
       } else {
         remoteDevices=(tree&&tree.devices)||{};
         closeModal(); joinSheet(cfg,tree);
@@ -1168,17 +1412,59 @@
     reader.readAsText(file); e.target.value="";
   });
 
+  /* ================= STORAGE DURABILITY =================
+     This request used to be fire-and-forget. persist() returns a boolean saying
+     whether it was actually GRANTED, and browsers usually refuse for an ordinary
+     visited page — granting it on engagement heuristics, or when the site has
+     been installed to the home screen. A refusal means the browser may clear
+     this app's data whenever the device is short of space, which is exactly how
+     a phone full of records comes back empty. The owner is now told. */
+  var storageState="unknown";
+  function renderStorageNote(){
+    var el=document.getElementById("storageNote"); if(!el) return;
+    if(storageState==="persistent"){
+      el.className="backup-note";
+      el.textContent="Storage: protected \u2014 this browser has agreed not to clear this app\u2019s data.";
+    } else if(storageState==="evictable"){
+      el.className="backup-note due";
+      el.textContent="Storage: not protected \u2014 this browser may clear this app\u2019s data if the phone runs low on space. Add the app to your home screen to fix that, and keep a recent backup.";
+    } else { el.className="backup-note"; el.textContent=""; }
+  }
+  function checkStorage(){
+    var s=null;
+    try{ s=navigator.storage; }catch(e){ s=null; }
+    if(!s||!s.persist||!s.persisted){ storageState="unknown"; renderStorageNote(); return; }
+    try{
+      s.persisted().then(function(already){
+        if(already){ storageState="persistent"; renderStorageNote(); return null; }
+        return s.persist().then(function(granted){ storageState=granted?"persistent":"evictable"; renderStorageNote(); });
+      }).catch(function(){ storageState="unknown"; renderStorageNote(); });
+    }catch(e){ storageState="unknown"; renderStorageNote(); }
+  }
+  function renderUndoBtn(){
+    var el=document.getElementById("undoBtn"); if(!el) return;
+    var t=readTrash();
+    if(!t){ el.style.display="none"; return; }
+    var days=Math.floor((Date.now()-t.ts)/86400000);
+    var kids=Object.keys((t.tree&&t.tree.meta&&t.tree.meta.kids)||{}).length;
+    el.style.display="";
+    el.textContent="\u21A9 Undo the last replace ("+kids+" kid"+(kids===1?"":"s")+", "+countTreeDays(t.tree)+" days, "+(days<1?"today":days+"d ago")+")";
+  }
+  document.getElementById("undoBtn").addEventListener("click",function(){
+    var t=readTrash(); if(!t){ renderUndoBtn(); return; }
+    confirmSheet({title:"Put the old copy back?",confirmLabel:"Restore it",
+      desc:"This restores the copy saved just before this phone\u2019s data was replaced, and merges in anything marked since, so nothing is thrown away. It will also be shared to the other phone.",
+      onConfirm:function(){ undoLastReplace(); renderUndoBtn(); }});
+  });
+
   /* ================= TOAST ================= */
   var toastEl=document.getElementById("toast"), toastTimer;
   function toast(m){ toastEl.textContent=m; toastEl.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.classList.remove("show"); },2000); }
 
   /* ================= BOOT ================= */
   (function(){ var v=document.getElementById("verText"); if(v) v.textContent=APP_VERSION+" (schema "+SCHEMA+")"; })();
-  loadLocal(); render(); renderBackupNote(); renderBanner();
-  /* Ask the browser not to evict this app's storage. Safari in particular can
-     clear script-writable storage for sites left unused, and this app's data is
-     the only copy on a phone that isn't backed up. Best-effort; ignore refusals. */
-  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  loadLocal(); render(); renderBackupNote(); renderUndoBtn(); renderBanner();
+  checkStorage();
   if(syncOn()){ setStatus("syncing"); startPolling(); beat(true); pull(true); }
   document.addEventListener("visibilitychange",function(){
     if(document.hidden){ stopPolling(); }
