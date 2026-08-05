@@ -1,523 +1,1478 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#385452">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="SG Attendance">
-<title>Sonali Garg Label — Attendance</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Alice&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Star Chart">
+<meta name="theme-color" content="#7A5CF0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%237A5CF0'/%3E%3Cpath d='M50 18l9.9 20.1 22.1 3.2-16 15.6 3.8 22-19.8-10.4-19.8 10.4 3.8-22-16-15.6 22.1-3.2z' fill='%23FFC22E'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%237A5CF0'/%3E%3Cpath d='M50 18l9.9 20.1 22.1 3.2-16 15.6 3.8 22-19.8-10.4-19.8 10.4 3.8-22-16-15.6 22.1-3.2z' fill='%23FFC22E'/%3E%3C/svg%3E">
+<title>Attendance Star Chart</title>
 <style>
-:root{
-  /* Sonali Garg Label brand palette */
-  --ink:#243534;          /* darkest green — primary text */
-  --green:#385452;        /* primary green — headings, fills */
-  --green-lt:#4c7370;     /* lighter green — tertiary text */
-  --gold:#dbc078;         /* gold — fills and borders. Never text on white */
-  --gold-soft:#e6d3a0;
-  --gold-deep:#b98947;    /* from the logo gradient */
-  --white:#ffffff;
-  /* derived, used with discretion */
-  --page:#faf8f3; --card:#ffffff;
-  --line:#e7e2d6; --line-soft:#f1ede3;
-  --wash-gold:#fbf5e6; --wash-green:#eef2f1;
-  --negative:#a6503a; --field:#fcfbf7;
-  --r:14px; --r-sm:9px;
-  --font-display:"Alice",Georgia,serif;
-  --font-body:"Lato",system-ui,-apple-system,sans-serif;
-}
-*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
-body{
-  background:var(--page); color:var(--ink);
-  font-family:var(--font-body); font-size:16px; line-height:1.55; font-weight:400;
-  -webkit-font-smoothing:antialiased;
-  padding-bottom:env(safe-area-inset-bottom);
-}
-h1,h2,h3{margin:0;font-weight:400}
-button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit}
-input,select{font-family:inherit;font-size:16px}
-.mono{font-variant-numeric:tabular-nums;letter-spacing:.01em}
-.serif{font-family:var(--font-display)}
+  :root{
+    --bg:#FFF9F0;--card:#FFFFFF;--ink:#2C2447;--ink-soft:#7C748F;--line:#EFE7DA;--line-strong:#E2D8C7;
+    --green:#2FB56A;--green-deep:#1E8E52;--green-soft:#E4F6EC;--danger:#F0554B;
+    --accent:#7A5CF0;--accent-soft:#EEE9FE;--gold:#FFC22E;--kidc:#7A5CF0;
+    --amber:#E8952B;--amber-soft:#FBEBD4;
+    --shadow:0 2px 0 rgba(44,36,71,.05), 0 12px 26px -16px rgba(44,36,71,.4);
+    --sans:ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--sans);color:var(--ink);background:var(--bg);line-height:1.45;-webkit-text-size-adjust:100%;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(122,92,240,.10) 0 8px, transparent 9px),
+      radial-gradient(circle at 82% 12%, rgba(255,194,46,.16) 0 7px, transparent 8px),
+      radial-gradient(circle at 68% 42%, rgba(47,181,106,.10) 0 6px, transparent 7px),
+      radial-gradient(circle at 24% 68%, rgba(240,85,75,.10) 0 7px, transparent 8px),
+      radial-gradient(circle at 90% 78%, rgba(59,155,232,.12) 0 6px, transparent 7px),
+      radial-gradient(circle at 40% 92%, rgba(255,194,46,.13) 0 5px, transparent 6px);
+    background-attachment:fixed;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:14px 16px 70px;}
 
-.wrap{max-width:520px;margin:0 auto;padding:0 20px}
-.screen{display:none;min-height:100dvh;flex-direction:column}
-.screen.on{display:flex}
-.pad-top{padding-top:calc(20px + env(safe-area-inset-top))}
-.eyebrow{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--green-lt);font-weight:700}
-.hr{height:1px;background:var(--line);border:0;margin:20px 0}
-.spacer{flex:1}
-.note{font-size:12.5px;color:var(--green-lt);line-height:1.55}
+  .topbar{display:flex;justify-content:flex-end;margin:2px 2px 6px;}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;padding:6px 12px;border-radius:999px;border:2px solid var(--line-strong);background:var(--card);color:var(--ink-soft);cursor:pointer;font-family:inherit;}
+  .pill .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-soft);}
+  .pill.local .dot{background:#B4ADC2;}
+  .pill.synced{color:var(--green-deep);border-color:var(--green);} .pill.synced .dot{background:var(--green);}
+  .pill.syncing{color:var(--amber);border-color:var(--amber);} .pill.syncing .dot{background:var(--amber);animation:blink 1s infinite;}
+  .pill.offline{color:var(--danger);border-color:var(--danger);} .pill.offline .dot{background:var(--danger);}
+  .pill.alone{color:var(--amber);border-color:var(--amber);} .pill.alone .dot{background:var(--amber);}
+  .fp-box{border:2px dashed var(--line-strong);border-radius:14px;padding:12px 14px;margin:12px 0;text-align:center;}
+  .fp-label{display:block;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);}
+  .fp{display:block;font-size:30px;font-weight:900;letter-spacing:.16em;margin:4px 0 2px;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .fp-note{display:block;font-size:12px;color:var(--ink-soft);line-height:1.45;}
+  .dev-list{margin:6px 0 12px;}
+  .dev{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:2px solid var(--line);border-radius:12px;margin-bottom:6px;font-size:13px;}
+  .dev-x{margin-left:8px;border:0;background:transparent;color:var(--ink-soft);font-size:15px;line-height:1;padding:2px 4px;cursor:pointer;border-radius:6px;}
+  .dev-x:hover,.dev-x:focus{background:var(--line);color:var(--danger);}
+  .dev em{font-style:normal;color:var(--ink-soft);font-size:12px;}
+  .dev b{font-size:12px;font-weight:800;color:var(--ink-soft);white-space:nowrap;}
+  .pill.denied{color:var(--danger);border-color:var(--danger);} .pill.denied .dot{background:var(--danger);animation:blink 1s infinite;}
+  .banner{display:none;}
+  .banner.show{display:block;border:2px solid var(--danger);background:#FDE6E5;border-radius:16px;padding:13px 15px;margin:0 0 14px;}
+  .banner b{display:block;font-size:14px;margin-bottom:5px;color:var(--ink);}
+  .banner p{margin:0 0 10px;font-size:12.5px;line-height:1.5;color:var(--ink-soft);}
+  .rules{background:#2C2447;color:#F4F1FF;border-radius:12px;padding:11px 13px;margin:9px 0;font-size:11.5px;line-height:1.5;overflow-x:auto;white-space:pre;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-user-select:all;user-select:all;}
+  .verline{font-size:11.5px;color:var(--ink-soft);opacity:.75;margin:14px 0 0;text-align:center;}
+  .backup-note{font-size:12.5px;line-height:1.5;color:var(--ink-soft);margin:8px 0 0;}
+  .backup-note.due{color:var(--amber);font-weight:700;}
+  .warnbox{border:2px solid var(--amber);background:var(--amber-soft);border-radius:14px;padding:12px 14px;margin:10px 0;}
+  .warnbox b{display:block;font-size:13px;margin-bottom:4px;}
+  .warnbox p{margin:0;font-size:12.5px;line-height:1.5;}
+  @keyframes blink{50%{opacity:.3;}}
 
-/* ── brand masthead: white logo on a deep green field ── */
-.crest{
-  background:var(--green);border-radius:var(--r);
-  padding:30px 24px 22px;text-align:center;
-  border:1px solid var(--gold);position:relative
-}
-.crest::after{
-  content:"";position:absolute;inset:5px;border:1px solid rgba(219,192,120,.35);
-  border-radius:10px;pointer-events:none
-}
-.crest .logo{width:min(210px,60%);height:auto;color:var(--white);display:block;margin:0 auto}
-.crest .logo svg{width:100%;height:auto;display:block}
-.crest .cap{
-  font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;
-  color:var(--gold-soft);margin-top:14px;font-weight:400
-}
-.markline{display:flex;align-items:center;gap:13px}
-.markline .mark{width:30px;color:var(--green);flex:none}
-.markline .mark svg{width:100%;height:auto;display:block}
+  .kidbar{display:flex;gap:12px;overflow-x:auto;padding:6px 2px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .kidbar::-webkit-scrollbar{display:none;}
+  .kid{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:none;padding:0;cursor:pointer;width:62px;}
+  .kid .bubble{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-size:28px;background:#fff;border:3px solid var(--line-strong);transition:transform .12s ease;}
+  .kid.active .bubble{border-color:var(--kidc);box-shadow:0 0 0 4px color-mix(in srgb, var(--kidc) 22%, transparent);transform:translateY(-2px) scale(1.04);}
+  .kid .kn{font-size:12px;font-weight:700;color:var(--ink-soft);max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .kid.active .kn{color:var(--ink);}
+  .kid.add .bubble{border-style:dashed;color:var(--ink-soft);font-size:30px;background:transparent;}
 
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px}
-.card + .card{margin-top:12px}
-.field{display:block;margin-bottom:14px}
-.field span{display:block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--green-lt);margin-bottom:7px;font-weight:700}
-.field input,.field select{
-  width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:var(--r-sm);
-  background:var(--field);color:var(--ink);transition:border-color .15s,box-shadow .15s
-}
-.field input:focus,.field select:focus{outline:none;border-color:var(--gold-deep);box-shadow:0 0 0 3px var(--wash-gold)}
-.row{display:flex;gap:10px}
-.row > *{flex:1;min-width:0}
+  header{display:flex;align-items:center;gap:12px;margin:6px 2px 18px;}
+  .h-ava{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:26px;background:var(--accent-soft);border:2px solid var(--accent);flex:0 0 auto;}
+  .h-text{min-width:0;}
+  .eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);font-weight:800;}
+  h1{font-size:26px;line-height:1.1;margin:1px 0 0;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:8px;}
+  .pencil{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;border-radius:8px;color:var(--ink-soft);}
+  .pencil:hover{background:var(--accent-soft);}
 
-.btn{
-  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
-  padding:14px 18px;border-radius:var(--r-sm);background:var(--green);color:var(--white);
-  font-weight:700;font-size:15px;letter-spacing:.02em;transition:transform .1s,background .15s
-}
-.btn:active{transform:scale(.985)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn.ghost{background:transparent;color:var(--green);border:1px solid var(--line)}
-.btn.quiet{background:transparent;color:var(--green-lt);padding:8px;font-weight:400}
-.btn.sm{padding:9px 14px;font-size:13px;width:auto;font-weight:400}
+  .marking{display:flex;align-items:center;gap:10px;background:var(--card);border:2px solid var(--line-strong);border-radius:18px;padding:9px 11px;box-shadow:var(--shadow);margin-bottom:14px;}
+  .marking .label{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-soft);font-weight:800;}
+  .marking .date{font-weight:800;font-size:16px;flex:1;}
+  .marking .date small{display:block;font-weight:600;font-size:11px;color:var(--ink-soft);}
+  .step{width:42px;height:42px;flex:0 0 auto;border-radius:13px;border:2px solid var(--line-strong);background:#fff;font-size:22px;color:var(--ink);cursor:pointer;display:grid;place-items:center;font-weight:800;}
+  .step:active{transform:translateY(1px);}
+  .today-btn{border:none;background:var(--accent);color:#fff;font-weight:800;font-size:12px;padding:10px 13px;border-radius:12px;cursor:pointer;font-family:inherit;}
+  .today-btn[disabled]{opacity:.35;cursor:default;}
+  .date-holder{position:relative;}
+  input[type=date].hiddendate{position:absolute;opacity:0;width:100%;height:100%;left:0;top:0;cursor:pointer;}
 
-/* ── the fence ── */
-.fence{position:relative;width:min(300px,78vw);aspect-ratio:1;margin:10px auto 0}
-.fence svg{width:100%;height:100%;display:block;overflow:visible}
-.fence-core{
-  position:absolute;inset:0;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;text-align:center;pointer-events:none;
-  padding:0 27%   /* keeps every label inside the dashed ring */
-}
-.fence-dist{font-family:var(--font-display);font-size:52px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
-.fence-unit{font-size:10px;color:var(--green-lt);margin-top:6px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.35}
-.fence-verdict{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-top:11px;line-height:1.35}
-.ring-track{fill:none;stroke:var(--line);stroke-width:1.5}
-.ring-fence{fill:none;stroke:var(--gold-deep);stroke-width:2;stroke-dasharray:4 5;opacity:.7}
-.ring-halo{stroke:none;opacity:.18}
-.you{transition:cx .8s cubic-bezier(.3,0,.2,1),cy .8s cubic-bezier(.3,0,.2,1)}
-.pulse{animation:pulse 2.4s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:.16}50%{opacity:.34}}
-@media (prefers-reduced-motion:reduce){.you{transition:none}.pulse{animation:none}}
-.state-in .ring-fence{stroke:var(--green);opacity:1}
-.state-in .fence-verdict{color:var(--green)}
-.state-out .ring-fence{stroke:var(--negative)}
-.state-out .fence-verdict{color:var(--negative)}
-.state-wait .fence-verdict{color:var(--green-lt)}
+  .range{margin:0 2px 16px;}
+  .range .rlabel{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-soft);font-weight:800;margin:0 0 8px;}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;}
+  .chip{border:2px solid var(--line-strong);background:var(--card);color:var(--ink);padding:7px 13px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .chip[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .custom-dates{display:none;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;}
+  .custom-dates.show{display:flex;}
+  .custom-dates label{font-size:12px;color:var(--ink-soft);font-weight:700;display:flex;flex-direction:column;gap:3px;}
+  .custom-dates input{font:inherit;padding:8px 9px;border:2px solid var(--line-strong);border-radius:10px;background:#fff;color:var(--ink);}
 
-.punch-zone{padding:22px 0 8px}
-.punch{
-  width:100%;padding:22px;border-radius:var(--r);font-size:18px;font-weight:700;
-  letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:10px;
-  background:var(--wash-green);color:var(--green-lt);
-  transition:transform .1s,opacity .15s
-}
-.punch:active{transform:scale(.98)}
-.punch:disabled{opacity:.55;cursor:not-allowed}
-.punch.arrive{background:var(--gold);color:var(--ink);opacity:1}
-.punch.leave{background:var(--green);color:var(--white);opacity:1}
-.punch-note{text-align:center;font-size:12.5px;color:var(--green-lt);margin-top:10px;min-height:20px}
+  .cards{display:flex;flex-direction:column;gap:14px;}
+  .card{background:var(--card);border:2px solid var(--line-strong);border-radius:20px;padding:16px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:7px;background:var(--kidc);}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+  .cname{font-size:19px;font-weight:800;letter-spacing:-.01em;word-break:break-word;padding-left:4px;}
+  .menu-btn{border:none;background:transparent;color:var(--ink-soft);font-size:24px;line-height:1;width:34px;height:30px;border-radius:9px;cursor:pointer;flex:0 0 auto;margin:-4px -6px 0 0;}
+  .menu-btn:hover{background:var(--bg);}
+  .readout{display:flex;align-items:baseline;gap:9px;margin:8px 0 0;padding-left:4px;}
+  .bignum{font-size:46px;font-weight:800;line-height:1;color:var(--kidc);letter-spacing:-.03em;}
+  .unit{font-size:13px;color:var(--ink-soft);font-weight:700;}
+  .alltime{margin-left:auto;text-align:right;font-size:11px;color:var(--ink-soft);font-weight:700;}
+  .alltime b{display:block;color:var(--ink);font-size:15px;}
+  .stars{margin:12px 0 14px;padding-left:4px;min-height:28px;display:flex;flex-wrap:wrap;gap:5px 6px;align-items:center;}
+  .stars .more{font-size:13px;color:var(--ink-soft);font-weight:800;margin-left:2px;}
+  .stars .empty{font-size:13px;color:var(--ink-soft);font-style:italic;}
+  .mark-btn{width:100%;border:2.5px solid var(--green);background:#fff;color:var(--green-deep);font-weight:800;font-size:15px;padding:14px;border-radius:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;transition:background .12s ease;}
+  .mark-btn:active{transform:translateY(1px);}
+  .mark-btn.on{background:var(--green);border-color:var(--green);color:#fff;}
+  .mark-btn .tick{font-size:18px;}
 
-.log{margin-top:6px}
-.log-item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line-soft)}
-.log-item:last-child{border-bottom:0}
-.tick{width:7px;height:7px;border-radius:50%;flex:none}
-.tick.in{background:var(--gold-deep)}
-.tick.out{background:var(--green)}
-.log-kind{font-size:14px;font-weight:700;flex:1}
-.log-time{font-size:15px;font-variant-numeric:tabular-nums}
-.log-meta{font-size:11.5px;color:var(--green-lt);font-variant-numeric:tabular-nums}
+  .cal-toggle-row{margin-top:12px;text-align:center;}
+  .cal-toggle{border:none;background:transparent;color:var(--accent);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;padding:7px 12px;border-radius:11px;}
+  .cal-toggle:hover{background:var(--accent-soft);}
+  .cal{margin-top:12px;border-top:2px dashed var(--line);padding-top:14px;display:flex;flex-direction:column;gap:18px;}
+  .cal-note{font-size:12px;color:var(--ink-soft);text-align:center;}
+  .cal-title{font-weight:800;font-size:14px;margin-bottom:8px;text-align:center;color:var(--ink);}
+  .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px;}
+  .cal-dow span{text-align:center;font-size:10px;font-weight:800;color:var(--ink-soft);}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+  .cal-cell{aspect-ratio:1;border:none;background:var(--bg);border-radius:10px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit;display:grid;place-items:center;padding:0;line-height:1;}
+  .cal-cell:active{transform:scale(.92);}
+  .cal-cell.blank{background:transparent;cursor:default;}
+  .cal-cell.out{opacity:.32;}
+  .cal-cell.today{box-shadow:inset 0 0 0 2px var(--accent);}
+  .cal-cell.present{color:#fff;}
+  .cal-legend{display:flex;justify-content:center;gap:16px;font-size:11px;color:var(--ink-soft);font-weight:700;}
+  .cal-legend i{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:-1px;margin-right:5px;}
 
-.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em}
-.pill.in{background:var(--wash-gold);color:var(--gold-deep)}
-.pill.out{background:var(--wash-green);color:var(--green)}
-.pill.flag{background:#f7ece8;color:var(--negative)}
-.pill.idle{background:var(--line-soft);color:var(--green-lt)}
-.pill.ot{background:var(--gold);color:var(--ink)}
+  .add-btn{width:100%;margin-top:16px;border:2.5px dashed var(--line-strong);background:transparent;color:var(--ink-soft);font-weight:800;font-size:15px;padding:16px;border-radius:16px;cursor:pointer;font-family:inherit;}
+  .add-btn:hover{border-color:var(--accent);color:var(--accent);}
 
-.tabs{display:flex;gap:4px;background:var(--wash-green);padding:4px;border-radius:var(--r-sm);margin:16px 0}
-.tabs button{flex:1;padding:9px 4px;border-radius:6px;font-size:12.5px;font-weight:700;color:var(--green-lt);transition:all .15s}
-.tabs button.on{background:var(--card);color:var(--green);box-shadow:0 1px 3px rgba(36,53,52,.12)}
-.panel{display:none}
-.panel.on{display:block}
+  .tools{margin-top:26px;padding-top:18px;border-top:2px dashed var(--line-strong);display:flex;flex-direction:column;gap:10px;}
+  .tools h2{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);margin:6px 2px 2px;font-weight:800;}
+  .tool-row{display:flex;gap:10px;}
+  .tool-btn{flex:1;border:2px solid var(--line-strong);background:var(--card);color:var(--ink);font-weight:800;font-size:14px;padding:13px;border-radius:13px;cursor:pointer;font-family:inherit;}
+  .tool-btn:active{transform:translateY(1px);}
+  .tools p{font-size:12px;color:var(--ink-soft);margin:4px 2px 0;line-height:1.5;}
 
-.roster-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line-soft)}
-.roster-row:last-child{border-bottom:0}
-.avatar{
-  width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;
-  background:var(--green);color:var(--gold-soft);font-size:14px;font-weight:700
-}
-.roster-main{flex:1;min-width:0}
-.roster-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.roster-sub{font-size:12px;color:var(--green-lt)}
+  .empty-state{text-align:center;color:var(--ink-soft);padding:34px 16px;border:2.5px dashed var(--line-strong);border-radius:20px;background:var(--card);}
+  .empty-state .em{font-size:40px;display:block;margin-bottom:8px;}
+  .empty-state b{display:block;color:var(--ink);font-size:17px;margin-bottom:6px;}
 
-table{width:100%;border-collapse:collapse;font-size:13.5px}
-th{text-align:left;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--green-lt);font-weight:700;padding:8px 6px;border-bottom:1px solid var(--line)}
-td{padding:10px 6px;border-bottom:1px solid var(--line-soft)}
-th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
-tr.total td{border-top:2px solid var(--green);border-bottom:0;font-weight:700;padding-top:12px}
+  .overlay{position:fixed;inset:0;background:rgba(44,36,71,.42);display:none;align-items:flex-end;justify-content:center;z-index:50;}
+  .overlay.show{display:flex;}
+  .sheet{background:var(--card);width:100%;max-width:560px;border-radius:24px 24px 0 0;padding:24px 20px calc(22px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px -12px rgba(0,0,0,.4);animation:rise .18s ease;max-height:88vh;overflow-y:auto;}
+  @keyframes rise{from{transform:translateY(26px);opacity:.5;}to{transform:none;opacity:1;}}
+  .sheet h3{margin:0 0 4px;font-size:20px;font-weight:800;}
+  .sheet p{margin:0 0 16px;color:var(--ink-soft);font-size:14px;}
+  .sheet label.fld{display:block;font-size:12px;font-weight:800;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;margin:0 0 6px;}
+  .sheet input[type=text]{width:100%;font:inherit;font-size:16px;padding:14px;border:2px solid var(--line-strong);border-radius:14px;background:#fff;color:var(--ink);margin-bottom:16px;}
+  .grid-label{font-size:12px;font-weight:800;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.1em;margin:0 0 8px;}
+  .emoji-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:18px;}
+  .emoji-grid button{font-size:26px;background:var(--bg);border:2px solid transparent;border-radius:14px;padding:8px 0;cursor:pointer;}
+  .emoji-grid button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);}
+  .swatches{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;}
+  .swatches button{width:36px;height:36px;border-radius:50%;border:3px solid #fff;cursor:pointer;box-shadow:0 0 0 2px var(--line-strong);}
+  .swatches button[aria-pressed=true]{box-shadow:0 0 0 3px var(--ink);transform:scale(1.1);}
+  .sheet .actions{display:flex;gap:10px;}
+  .btn{flex:1;border:none;font-weight:800;font-size:15px;padding:15px;border-radius:14px;cursor:pointer;font-family:inherit;}
+  .btn.primary{background:var(--accent);color:#fff;}
+  .btn.ghost{background:var(--bg);color:var(--ink);border:2px solid var(--line-strong);}
+  .btn.warn{background:var(--danger);color:#fff;}
+  .btn.col{flex-direction:column;}
+  .result{font-size:13px;font-weight:700;padding:12px 14px;border-radius:12px;margin-bottom:14px;line-height:1.45;display:none;}
+  .result.ok{display:block;background:var(--green-soft);color:var(--green-deep);}
+  .result.bad{display:block;background:#FDE6E5;color:#B23B30;}
+  .guide{background:var(--bg);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--ink);line-height:1.6;}
+  .guide ol{margin:6px 0 0;padding-left:20px;} .guide li{margin-bottom:7px;}
+  .guide code{background:#fff;border:1px solid var(--line-strong);border-radius:6px;padding:1px 6px;font-size:12px;word-break:break-all;}
+  .guide a{color:var(--accent);font-weight:700;}
+  .disc{font-size:11px;color:var(--ink-soft);margin:0 0 14px;line-height:1.5;}
+  .share-box{background:var(--accent-soft);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13px;word-break:break-all;}
+  .share-box b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:2px;}
+  .share-box .v{font-weight:800;margin-bottom:10px;}
 
-.empty{text-align:center;padding:34px 16px;color:var(--green-lt);font-size:13.5px}
-.empty .serif{display:block;font-size:21px;color:var(--green);margin-bottom:6px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-size:14px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:60;box-shadow:0 8px 24px -8px rgba(0,0,0,.5);max-width:90%;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .pop{position:fixed;font-size:20px;pointer-events:none;z-index:70;will-change:transform,opacity;}
 
-#toast{
-  position:fixed;left:50%;transform:translateX(-50%) translateY(140%);
-  bottom:calc(22px + env(safe-area-inset-bottom));z-index:99;
-  background:var(--ink);color:var(--white);padding:12px 20px;border-radius:999px;
-  font-size:14px;font-weight:700;max-width:88vw;text-align:center;
-  transition:transform .3s cubic-bezier(.2,.8,.2,1)
-}
-#toast.on{transform:translateX(-50%) translateY(0)}
-#toast.bad{background:var(--negative)}
-#toast.good{background:var(--green)}
-
-.foot{padding:20px 0 28px;text-align:center}
-.link{color:var(--green);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:8px;}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
 </head>
 <body>
+<div class="wrap">
+  <div class="topbar"><button class="pill local" id="statusPill"><span class="dot"></span><span id="statusText">On this phone</span></button></div>
+  <div class="banner" id="banner"></div>
 
-<!-- ============ BOOT ============ -->
-<section id="s-boot" class="screen on">
-  <div class="wrap" style="margin:auto;text-align:center">
-    <div class="serif" style="font-size:25px;color:var(--green)">Opening the workroom…</div>
-    <div class="note" style="margin-top:8px">Connecting</div>
+  <div class="kidbar" id="kidbar"></div>
+
+  <header>
+    <div class="h-ava" id="hAva">🙂</div>
+    <div class="h-text">
+      <div class="eyebrow">Attendance Chart</div>
+      <h1><span id="kidName">—</span><button class="pencil" id="editKid" aria-label="Edit this kid">✎</button></h1>
+    </div>
+  </header>
+
+  <div class="marking" id="markingBar">
+    <span class="step" id="prevDay" aria-label="Previous day">‹</span>
+    <div class="date date-holder">
+      <span class="label">Recording for</span>
+      <span id="markDateText">Today</span>
+      <small id="markDateSub"></small>
+      <input type="date" class="hiddendate" id="markDatePicker" aria-label="Pick the day to record">
+    </div>
+    <span class="step" id="nextDay" aria-label="Next day">›</span>
+    <button class="today-btn" id="jumpToday">Today</button>
   </div>
-</section>
 
-<!-- ============ SIGN IN ============ -->
-<section id="s-login" class="screen">
-  <div class="wrap pad-top" style="display:flex;flex-direction:column;flex:1">
-    <div class="crest">
-      <div class="logo" data-logo></div>
-      <div class="cap">Attendance</div>
+  <div class="range" id="rangeWrap">
+    <p class="rlabel">Count over</p>
+    <div class="chips" id="chips">
+      <button class="chip" data-range="month">This month</button>
+      <button class="chip" data-range="30">Last 30 days</button>
+      <button class="chip" data-range="year">This year</button>
+      <button class="chip" data-range="all" aria-pressed="true">All time</button>
+      <button class="chip" data-range="custom">Custom</button>
     </div>
-    <div class="card" style="margin-top:12px">
-      <label class="field">
-        <span>Who is punching in?</span>
-        <select id="loginWorker"><option value="">Select your name</option></select>
-      </label>
-      <label class="field">
-        <span>Your 4-digit PIN</span>
-        <input id="loginPin" type="tel" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" class="mono" style="letter-spacing:.5em;font-size:20px">
-      </label>
-      <button class="btn" id="doLogin">Sign in</button>
-      <p class="note" style="margin:12px 0 0">This phone will be remembered, so you only enter the PIN once.</p>
-    </div>
-    <p class="note" id="brandName" style="text-align:center;margin:14px 0 0;letter-spacing:.1em"></p>
-    <div class="spacer"></div>
-    <div class="foot"><button class="link" id="toAdminLogin">Owner access</button></div>
-  </div>
-</section>
-
-<!-- ============ ADMIN SIGN IN ============ -->
-<section id="s-adminlogin" class="screen">
-  <div class="wrap pad-top" style="display:flex;flex-direction:column;flex:1">
-    <div class="crest">
-      <div class="logo" data-logo></div>
-      <div class="cap">Owner access</div>
-    </div>
-    <div class="card" style="margin-top:12px">
-      <label class="field">
-        <span>Owner PIN</span>
-        <input id="adminPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••••" class="mono" style="letter-spacing:.4em;font-size:20px">
-      </label>
-      <button class="btn" id="doAdminLogin">Open admin</button>
-    </div>
-    <div class="spacer"></div>
-    <div class="foot"><button class="link" id="backToWorker">Back to attendance</button></div>
-  </div>
-</section>
-
-<!-- ============ FIRST RUN SETUP ============ -->
-<section id="s-setup" class="screen">
-  <div class="wrap pad-top">
-    <div class="crest">
-      <div class="logo" data-logo></div>
-      <div class="cap">Set up the workroom</div>
-    </div>
-    <div class="card" style="margin-top:12px">
-      <p class="note" style="margin:0 0 16px">Stand inside your workshop before saving the location — the app reads the coordinates from this phone.</p>
-      <label class="field">
-        <span>Business name</span>
-        <input id="setBrand" value="Sonali Garg Label">
-      </label>
-      <label class="field">
-        <span>Owner PIN (you will need this every time)</span>
-        <input id="setAdminPin" type="tel" inputmode="numeric" maxlength="8" placeholder="Choose 4–8 digits" class="mono">
-      </label>
-      <div class="hr"></div>
-      <div class="eyebrow" style="margin-bottom:10px">Workshop location</div>
-      <button class="btn ghost" id="grabLoc">Use my current position</button>
-      <p class="note mono" id="locReadout" style="margin:10px 0 0">Not set</p>
-      <label class="field" style="margin-top:14px">
-        <span>Allowed radius (metres)</span>
-        <input id="setRadius" type="number" value="100" min="20" max="500">
-      </label>
-      <p class="note" style="margin:-6px 0 0">Start at 100 m. Tighten it later once you have seen real readings.</p>
-      <div class="hr"></div>
-      <div class="row">
-        <label class="field"><span>Shift start</span><input id="setStart" type="time" value="10:00"></label>
-        <label class="field"><span>Shift end</span><input id="setEnd" type="time" value="18:30"></label>
-      </div>
-      <div class="row">
-        <label class="field"><span>Paid hours = one day</span><input id="setHours" type="number" value="8" step="0.5" min="1" max="16"></label>
-        <label class="field"><span>Unpaid break (min)</span><input id="setBreak" type="number" value="30" min="0" max="120"></label>
-      </div>
-      <label class="field">
-        <span>Late grace (min)</span>
-        <input id="setGrace" type="number" value="15" min="0" max="120">
-      </label>
-      <p class="note" style="margin:-6px 0 16px">Night pay starts at 6 extra hours for a full night, and 4 hours beyond that for
-      a double night. You can change those under Settings later.</p>
-      <button class="btn" id="saveSetup">Save and open admin</button>
-    </div>
-    <div style="height:30px"></div>
-  </div>
-</section>
-
-<!-- ============ WORKER ============ -->
-<section id="s-worker" class="screen">
-  <div class="wrap pad-top" style="display:flex;flex-direction:column;flex:1">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-      <div class="markline">
-        <div class="mark" data-mark></div>
-        <div>
-          <div class="eyebrow" id="wDate">—</div>
-          <div class="serif" style="font-size:23px;line-height:1.2;color:var(--ink)" id="wName">—</div>
-        </div>
-      </div>
-      <button class="btn quiet" id="wSignOut" style="font-size:12.5px;width:auto;flex:none">Not you?</button>
-    </div>
-
-    <div class="fence state-wait" id="fence">
-      <svg viewBox="0 0 200 200" aria-hidden="true">
-        <circle class="ring-track" cx="100" cy="100" r="94"/>
-        <circle class="ring-halo pulse" id="halo" cx="100" cy="100" r="0" fill="var(--green)"/>
-        <circle class="ring-fence" cx="100" cy="100" r="62"/>
-        <circle class="you" id="you" cx="100" cy="100" r="6" fill="var(--ink)"/>
-      </svg>
-      <div class="fence-core">
-        <div class="fence-dist" id="fDist">—</div>
-        <div class="fence-unit" id="fUnit">metres away</div>
-        <div class="fence-verdict" id="fVerdict">Finding you</div>
-      </div>
-    </div>
-
-    <div class="punch-zone">
-      <button class="punch" id="punchBtn" disabled>Checking location…</button>
-      <div class="punch-note" id="punchNote"></div>
-    </div>
-
-    <div class="card">
-      <div class="eyebrow" style="margin-bottom:4px">Today</div>
-      <div class="log" id="wLog"></div>
-    </div>
-
-    <div class="spacer" style="min-height:24px"></div>
-    <div class="foot"><span class="note" id="wHours">—</span></div>
-  </div>
-</section>
-
-<!-- ============ ADMIN ============ -->
-<section id="s-admin" class="screen">
-  <div class="wrap pad-top">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-      <div class="markline">
-        <div class="mark" data-mark></div>
-        <div>
-          <div class="eyebrow">Owner</div>
-          <div class="serif" style="font-size:23px;line-height:1.2;color:var(--ink)" id="aBrand">—</div>
-        </div>
-      </div>
-      <button class="btn quiet" id="aSignOut" style="font-size:12.5px;width:auto;flex:none">Sign out</button>
-    </div>
-
-    <div class="tabs">
-      <button data-tab="today" class="on">Today</button>
-      <button data-tab="people">People</button>
-      <button data-tab="pay">Payroll</button>
-      <button data-tab="rules">Settings</button>
-    </div>
-
-    <div class="panel on" id="p-today">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-          <div class="eyebrow" id="aToday">—</div>
-          <div class="note mono" id="aCount">—</div>
-        </div>
-        <div id="aBoard"></div>
-      </div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:6px">Correct a day</div>
-        <p class="note" style="margin:0 0 14px">Add a missing punch or remove a wrong one. Staff punches are never
-        overwritten — corrections are recorded separately, so the original stays on file.</p>
-        <div class="row">
-          <label class="field"><span>Who</span>
-            <select id="fixWorker"><option value="">Select a name</option></select>
-          </label>
-          <label class="field"><span>Which day</span><input id="fixDate" type="date"></label>
-        </div>
-        <button class="btn ghost" id="fixLoad">Show that day</button>
-        <div id="fixOut" style="margin-top:14px"></div>
-      </div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:10px">All punches today</div>
-        <div id="aFeed"></div>
-      </div>
-    </div>
-
-    <div class="panel" id="p-people">
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:6px">Roster</div>
-        <div id="aRoster"></div>
-      </div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:12px">Add someone</div>
-        <label class="field"><span>Full name</span><input id="nwName" placeholder="e.g. Ramesh Kumar"></label>
-        <label class="field"><span>Pay type</span>
-          <select id="nwType">
-            <option value="monthly">Monthly salary</option>
-            <option value="daily">Daily wage — called as needed</option>
-          </select>
-        </label>
-        <label class="field" id="nwMonthlyWrap"><span>Monthly salary (₹)</span><input id="nwMonthly" type="number" placeholder="18000"></label>
-        <label class="field" id="nwDayWrap" style="display:none"><span>Rate for a full day (₹)</span><input id="nwDay" type="number" placeholder="1200"></label>
-        <label class="field"><span>4-digit PIN for this person</span><input id="nwPin" type="tel" inputmode="numeric" maxlength="4" class="mono" placeholder="1234"></label>
-        <button class="btn" id="addWorker">Add to roster</button>
-      </div>
-    </div>
-
-    <div class="panel" id="p-pay">
-      <div class="card">
-        <div class="row">
-          <label class="field"><span>Month</span><input id="payMonth" type="month"></label>
-          <label class="field" style="flex:0 0 auto;align-self:end"><span style="visibility:hidden">Go</span><button class="btn" id="runPay" style="padding:12px 18px">Calculate</button></label>
-        </div>
-        <p class="note" style="margin:0">Sundays are treated as weekly off. Add festival closures under Settings.</p>
-      </div>
-      <div id="payOut"></div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:6px">Daily register</div>
-        <p class="note" style="margin:0 0 14px">A row for every worker for every day — in time, out time,
-        hours worked and what the day earned. Nights, Sundays and absences are colour-coded.</p>
-        <div class="row">
-          <label class="field"><span>From</span><input id="regFrom" type="date"></label>
-          <label class="field"><span>To</span><input id="regTo" type="date"></label>
-        </div>
-        <button class="btn" id="runReg">Download register</button>
-        <button class="btn ghost" id="runRegCsv" style="margin-top:8px">Download as spreadsheet instead</button>
-        <p class="note" id="regNote" style="margin:12px 0 0"></p>
-      </div>
-      <div style="height:30px"></div>
-    </div>
-
-    <div class="panel" id="p-rules">
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:12px">Location fence</div>
-        <p class="note mono" id="cfgLoc" style="margin:0 0 12px">—</p>
-        <button class="btn ghost" id="reLoc">Reset to my current position</button>
-        <label class="field" style="margin-top:14px"><span>Allowed radius (metres)</span><input id="cfgRadius" type="number" min="20" max="500"></label>
-      </div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:12px">The working day</div>
-        <div class="row">
-          <label class="field"><span>Shift start</span><input id="cfgStart" type="time"></label>
-          <label class="field"><span>Shift end</span><input id="cfgEnd" type="time"></label>
-        </div>
-        <div class="row">
-          <label class="field"><span>Paid hours = one day</span><input id="cfgHours" type="number" step="0.5"></label>
-          <label class="field"><span>Unpaid break (min)</span><input id="cfgBreak" type="number"></label>
-        </div>
-        <div class="row">
-          <label class="field"><span>Lunch after (hrs on floor)</span><input id="cfgBreakAfter" type="number" step="0.5"></label>
-          <label class="field"><span>Late grace (min)</span><input id="cfgGrace" type="number"></label>
-        </div>
-        <p class="note" style="margin:-6px 0 14px">Lunch is taken out of any day long enough to have had one.
-        Dinner is taken out only of a night or longer — someone staying late on overtime is not given dinner,
-        so nothing is deducted from them for it. A day is 8.5 hours on the floor for 8 paid,
-        a day plus a night is 15 hours for 14, and a double night is 19 hours for 18.</p>
-        <label class="field"><span>Salary divided by (days/month)</span><input id="cfgPayDays" type="number" min="28" max="31"></label>
-        <p class="note" style="margin:-6px 0 14px">Keep this at 30 so a day is worth the same in every month.
-        Sundays and declared closures are paid rest days.</p>
-        <label class="field"><span>Deduct for short hours</span>
-          <select id="cfgDeduct"><option value="yes">Yes</option><option value="no">No</option></select>
-        </label>
-      </div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:6px">Night pay ladder</div>
-        <p class="note" style="margin:0 0 14px">A full night adds one day's pay. A double night adds two.
-        Anything short of a full night is paid proportionally.</p>
-        <div class="row">
-          <label class="field"><span>Extra hrs = a night</span><input id="cfgNight" type="number" step="0.5"></label>
-          <label class="field"><span>Further hrs = double</span><input id="cfgDouble" type="number" step="0.5"></label>
-        </div>
-        <div class="row">
-          <label class="field"><span>Sunday paid hrs = one day</span><input id="cfgSundayHours" type="number" step="0.5"></label>
-          <label class="field"><span>Work day starts at</span><input id="cfgBoundary" type="time"></label>
-        </div>
-        <p class="note" style="margin:-6px 0 14px">A Sunday is a shorter day that still pays a full day.
-        "Work day starts at" keeps an overnight shift attached to the day it began — leave it earlier than any shift start.</p>
-        <p class="note mono" id="cfgLadder" style="margin:0 0 14px"></p>
-        <button class="btn" id="saveCfg">Save settings</button>
-      </div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:6px">Backup</div>
-        <p class="note" style="margin:0 0 14px">Downloads everything — settings, roster, every punch, closures and
-        corrections — as one file. Keep a copy somewhere other than this phone. Do this monthly.</p>
-        <button class="btn" id="doBackup">Download a backup</button>
-        <p class="note" id="backupNote" style="margin:12px 0 0"></p>
-        <div class="hr"></div>
-        <div class="eyebrow" style="margin-bottom:6px">Restore</div>
-        <p class="note" style="margin:0 0 14px">Reads a backup file back in. Settings, roster and closures are
-        replaced. Attendance history is added separately and marked as restored, because a past punch can never be
-        written back as if it were live — that is what keeps your records trustworthy.</p>
-        <label class="field"><span>Choose a backup file</span><input id="restoreFile" type="file" accept=".json"></label>
-        <div id="restorePreview"></div>
-      </div>
-      <div class="card">
-        <div class="eyebrow" style="margin-bottom:12px">Holidays and closures</div>
-        <div class="row">
-          <label class="field"><span>Date</span><input id="holDate" type="date"></label>
-          <label class="field"><span>Occasion</span><input id="holName" placeholder="Diwali"></label>
-        </div>
-        <button class="btn ghost" id="addHol">Add closure</button>
-        <div id="holList" style="margin-top:8px"></div>
-      </div>
-      <div style="height:30px"></div>
+    <div class="custom-dates" id="customDates">
+      <label>From<input type="date" id="rangeFrom"></label>
+      <label>To<input type="date" id="rangeTo"></label>
     </div>
   </div>
-</section>
 
-<div id="toast"></div>
+  <div class="cards" id="cards"></div>
+  <button class="add-btn" id="addClass">+ Add a class</button>
+
+  <div class="tools">
+    <h2>Share with another phone</h2>
+    <button class="tool-btn" id="syncBtn" style="flex:none;">📲 Sharing &amp; sync</button>
+
+    <h2>Keep your data safe</h2>
+    <div class="tool-row">
+      <button class="tool-btn" id="exportBtn">⬇ Back up</button>
+      <button class="tool-btn" id="importBtn">⬆ Restore</button>
+    </div>
+    <button class="tool-btn" id="undoBtn" style="flex:none;display:none;">↩ Undo the last replace</button>
+    <p>Data is stored on this phone. Turn on sharing to sync live with another phone, and back up now and then so nothing is ever lost.</p>
+    <p class="backup-note" id="backupNote"></p>
+    <p class="backup-note" id="storageNote"></p>
+    <p class="verline">Attendance Star Chart <span id="verText"></span> · works offline · your data stays on your phone</p>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
 
 <script>
-// The Sonali Garg monogram, fetched once and dropped into every [data-logo] slot.
-// It inherits its colour from CSS, so one file serves white-on-green and green-on-white.
-const paint = (file, sel) => fetch(file).then((r) => r.text()).then((svg) => {
-  document.querySelectorAll(sel).forEach((el) => { el.innerHTML = svg; });
-}).catch(() => {});
-paint('logo.svg', '[data-logo]');       // full lockup, for the green crests
-paint('logo-mark.svg', '[data-mark]');  // monogram only, legible small
+"use strict";
+(function(){
+  /* ================= PURE SYNC CORE (unit-tested separately) ================= */
+  function deepGet(tree,path){ if(!path) return tree; var s=path.split('/'),n=tree; for(var i=0;i<s.length;i++){ if(n==null) return undefined; n=n[s[i]]; } return n; }
+  function deepSet(tree,path,val){ if(!path) return val; var s=path.split('/'),n=tree||{},cur=n; for(var i=0;i<s.length-1;i++){ if(typeof cur[s[i]]!=='object'||cur[s[i]]==null) cur[s[i]]={}; cur=cur[s[i]]; } cur[s[s.length-1]]=val; return n; }
+  function deepMerge(tree,path,val){ var node=deepGet(tree,path); var m=Object.assign({},(node&&typeof node==='object')?node:{},val); return deepSet(tree,path,m); }
+  function deepDelete(tree,path){ var s=path.split('/'),n=tree; for(var i=0;i<s.length-1;i++){ if(n==null) return tree; n=n[s[i]]; } if(n) delete n[s[s.length-1]]; return tree; }
+  function applyRest(tree,op){ tree=tree||{}; if(op.method==='PUT'){ return op.path?deepSet(tree,op.path,op.body):op.body; } if(op.method==='PATCH'){ return deepMerge(tree,op.path,op.body); } if(op.method==='DELETE'){ return deepDelete(tree,op.path); } return tree; }
+
+  function stateToTree(state){
+    var tree={meta:{kids:{}},records:{}};
+    (state.kids||[]).forEach(function(k,ki){
+      var kn={name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:ki,classes:{}};
+      (k.classes||[]).forEach(function(c,ci){
+        kn.classes[c.id]={name:c.name,order:ci};
+        var recs=c.records||{},has=false,out={};
+        for(var d in recs){ if(recs[d]){ out[d]=true; has=true; } }
+        if(has){ tree.records[k.id]=tree.records[k.id]||{}; tree.records[k.id][c.id]=out; }
+      });
+      tree.meta.kids[k.id]=kn;
+    });
+    return tree;
+  }
+  function treeToState(tree,prevActiveId){
+    var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{};
+    var kids=Object.keys(mk).map(function(id){
+      var k=mk[id]||{}, classesObj=k.classes||{};
+      var classes=Object.keys(classesObj).map(function(cid){
+        var c=classesObj[cid]||{}, recs=(recAll[id]&&recAll[id][cid])||{}, r={};
+        for(var d in recs){ if(recs[d]) r[d]=true; }
+        return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r};
+      }).sort(function(a,b){return a.order-b.order;}).map(function(c){ delete c.order; return c; });
+      return {id:id,name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:(k.order==null?0:k.order),classes:classes};
+    }).sort(function(a,b){return a.order-b.order;}).map(function(k){ delete k.order; return k; });
+    var activeKidId=(prevActiveId&&kids.some(function(k){return k.id===prevActiveId;}))?prevActiveId:(kids.length?kids[0].id:null);
+    return {kids:kids,activeKidId:activeKidId};
+  }
+  function opMarkDay(kidId,classId,date,val){ return [{method:val?'PUT':'DELETE',path:'records/'+kidId+'/'+classId+'/'+date,body:val?true:undefined}]; }
+  function opAddKid(kid,order){ return [{method:'PUT',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft,order:order,classes:{}}}]; }
+  function opEditKid(kid){ return [{method:'PATCH',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft}}]; }
+  function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId}]; }
+  function opAddClass(kidId,cls,order){ return [{method:'PUT',path:'meta/kids/'+kidId+'/classes/'+cls.id,body:{name:cls.name,order:order}}]; }
+  function opRenameClass(kidId,classId,name){ return [{method:'PATCH',path:'meta/kids/'+kidId+'/classes/'+classId,body:{name:name}}]; }
+  function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId}]; }
+
+  /* Does this tree actually hold roster data? Used to refuse to adopt an empty
+     remote over a populated local tree (see pull()). A space that contains only
+     a devices/ node is NOT data. */
+  function treeHasKids(tree){
+    var mk=tree&&tree.meta&&tree.meta.kids;
+    if(!mk||typeof mk!=='object') return false;
+    return Object.keys(mk).length>0;
+  }
+
+  /* Data-shape version stamped into every space, so a future version of this app
+     can recognise and migrate an older space instead of guessing. */
+  var SCHEMA=5;
+
+  /* Firebase drops empty objects, so "every kid was deleted" and "this space was
+     never set up" both arrive as a missing meta node. A scalar marker survives
+     both, which lets pull() tell a deliberate deletion (adopt it) from a blank
+     space (re-seed it instead of wiping this phone). */
+  function spaceIsSeeded(tree){ return !!(tree&&tree.meta&&tree.meta.seeded); }
+  function metaForWrite(tree){
+    var m=(tree&&tree.meta&&typeof tree.meta==='object')?tree.meta:{};
+    return { kids:(m.kids&&typeof m.kids==='object')?m.kids:{}, seeded:true, schema:SCHEMA };
+  }
+
+  function normName(s){ return String(s==null?"":s).trim().toLowerCase().replace(/\s+/g,' '); }
+
+  /* Union-merge two trees. `incoming` (the shared space) wins on scalar
+     conflicts; nothing is ever dropped. Kids and classes are matched by id
+     first, then by normalised name — so two phones that each created their own
+     "Ruhaan" / "Phonics" fold into one instead of duplicating. Records are a
+     union: a day marked on either phone stays marked. */
+  function mergeTrees(base,incoming){
+    var out=JSON.parse(JSON.stringify(incoming||{}));
+    if(!out.meta||typeof out.meta!=='object') out.meta={};
+    if(!out.meta.kids||typeof out.meta.kids!=='object') out.meta.kids={};
+    if(!out.records||typeof out.records!=='object') out.records={};
+    var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{};
+
+    var maxKidOrder=-1, kidByName={};
+    Object.keys(out.meta.kids).forEach(function(id){
+      var k=out.meta.kids[id]||{}, o=(k.order==null?0:k.order);
+      if(o>maxKidOrder) maxKidOrder=o;
+      var n=normName(k.name); if(n&&kidByName[n]===undefined) kidByName[n]=id;
+    });
+
+    Object.keys(bKids).forEach(function(bid){
+      var bKid=bKids[bid]||{}, bn=normName(bKid.name);
+      var tid = out.meta.kids[bid] ? bid : (kidByName[bn]!==undefined ? kidByName[bn] : null);
+      if(tid===null){
+        tid=bid; maxKidOrder++;
+        out.meta.kids[tid]={name:bKid.name,emoji:bKid.emoji,color:bKid.color,soft:bKid.soft,order:maxKidOrder,classes:{}};
+        if(bn) kidByName[bn]=tid;
+      }
+      var tKid=out.meta.kids[tid];
+      if(!tKid.classes||typeof tKid.classes!=='object') tKid.classes={};
+
+      var maxClsOrder=-1, clsByName={};
+      Object.keys(tKid.classes).forEach(function(cid){
+        var c=tKid.classes[cid]||{}, o=(c.order==null?0:c.order);
+        if(o>maxClsOrder) maxClsOrder=o;
+        var n=normName(c.name); if(n&&clsByName[n]===undefined) clsByName[n]=cid;
+      });
+
+      var bClasses=bKid.classes||{};
+      Object.keys(bClasses).forEach(function(bcid){
+        var bCls=bClasses[bcid]||{}, cn=normName(bCls.name);
+        var tcid = tKid.classes[bcid] ? bcid : (clsByName[cn]!==undefined ? clsByName[cn] : null);
+        if(tcid===null){
+          tcid=bcid; maxClsOrder++;
+          tKid.classes[tcid]={name:bCls.name,order:maxClsOrder};
+          if(cn) clsByName[cn]=tcid;
+        }
+        var src=(bRec[bid]&&bRec[bid][bcid])||{}, any=false, d;
+        for(d in src){ if(src[d]){ any=true; break; } }
+        if(any){
+          if(!out.records[tid]) out.records[tid]={};
+          if(!out.records[tid][tcid]) out.records[tid][tcid]={};
+          for(d in src){ if(src[d]) out.records[tid][tcid][d]=true; }
+        }
+      });
+    });
+    return out;
+  }
+
+  /* Short human-comparable id for a space. Two phones on the same space always
+     show the same 4 characters; any difference in URL or code (including a
+     difference in capitalisation of the code) shows up immediately. Host case
+     is normalised because DNS is case-insensitive; the code's case is NOT,
+     because Firebase paths are case-sensitive. */
+  function spaceFingerprint(dbUrl,code){
+    var s=String(dbUrl==null?"":dbUrl).trim().replace(/\/+$/,"").toLowerCase()+"|"+String(code==null?"":code);
+    var h=0x811c9dc5;
+    for(var i=0;i<s.length;i++){ h=(h^s.charCodeAt(i))>>>0; h=(h*16777619)>>>0; }
+    return (("0000"+h.toString(36).toUpperCase()).slice(-4));
+  }
+
+  /* How much would this phone LOSE by adopting `remote`?
+     Counts leaves (kid -> class -> day) present locally and absent remotely,
+     plus kids that vanish entirely. Deliberately asymmetric: gains are ignored,
+     because gaining a day from the other phone is the normal, safe case.
+     pull() uses this to hold back a destructive adoption instead of applying it
+     silently, which is what allowed one accidental delete (or one wrong space
+     code) to wipe every phone within a single poll. */
+  function adoptionLoss(local,remote){
+    var lk=(local&&local.meta&&local.meta.kids)||{}, rk=(remote&&remote.meta&&remote.meta.kids)||{};
+    var lr=(local&&local.records)||{}, rr=(remote&&remote.records)||{};
+    var kidsLost=0, daysLost=0;
+    Object.keys(lk).forEach(function(kid){ if(!rk[kid]) kidsLost++; });
+    Object.keys(lr).forEach(function(kid){
+      var cls=lr[kid]||{};
+      Object.keys(cls).forEach(function(c){
+        var days=cls[c]||{};
+        Object.keys(days).forEach(function(d){
+          if(!days[d]) return;
+          if(!(rr[kid]&&rr[kid][c]&&rr[kid][c][d])) daysLost++;
+        });
+      });
+    });
+    return {kidsLost:kidsLost,daysLost:daysLost};
+  }
+  /* A single day unmarked on the other phone must NOT prompt, or the prompt
+     becomes noise and gets dismissed reflexively. Losing a whole kid always
+     prompts; losing days only past a threshold. */
+  function lossNeedsConsent(loss){
+    return !!loss && (loss.kidsLost>0 || loss.daysLost>=5);
+  }
+
+  /* ================= CONSTANTS ================= */
+  var APP_VERSION="v7";
+  var PALETTE=[
+    {name:"Grape",c:"#7A5CF0",soft:"#EEE9FE"},{name:"Berry",c:"#E85D9A",soft:"#FCE7F1"},
+    {name:"Tangerine",c:"#F58A3C",soft:"#FDECDD"},{name:"Grass",c:"#3BAF5A",soft:"#E4F6EA"},
+    {name:"Sky",c:"#3B9BE8",soft:"#E2F0FC"},{name:"Teal",c:"#14B5A6",soft:"#DEF6F3"},
+    {name:"Cherry",c:"#EF5350",soft:"#FDE6E5"},{name:"Sun",c:"#EBAF17",soft:"#FBF0D3"}
+  ];
+  var EMOJIS=["🦄","🐶","🐱","🦖","🐰","🐼","🦊","🐸","🦁","🐵","🐧","🐢","🐨","🐷","🌟","🚀"];
+
+  var K_TREE="att.tree.v3", K_UI="att.ui.v3", K_SYNC="att.sync.v3", K_QUEUE="att.queue.v3", K_DEV="att.device.v3", K_BAK="att.backup.v3",
+      K_TRASH="att.trash.v3", K_CODES="att.codes.v3";
+  var TRASH_KEEP_DAYS=14;     /* how long an undo snapshot stays offered */
+  var STALE_DEV_DAYS=30;      /* a phone unseen this long is hidden from the list */
+
+  /* ================= LOCAL DATA ================= */
+  var localTree={meta:{kids:{}},records:{}};
+  var state={kids:[],activeKidId:null};
+  var ui={activeKidId:null};
+  var markDate=todayISO();
+  var range={mode:"all",from:null,to:null};
+  var openCals={};
+
+  function saveLocal(){ try{ localStorage.setItem(K_TREE,JSON.stringify(localTree)); localStorage.setItem(K_UI,JSON.stringify(ui)); }catch(e){} }
+  function rebuildState(){ state=treeToState(localTree, ui.activeKidId); ui.activeKidId=state.activeKidId; }
+
+  /* Read and parse ONE key in isolation.
+     This used to be a single try/catch wrapped around the whole load. One
+     unparseable value therefore aborted everything after it — including the
+     sync config, which is why a corrupt tree presented as "On this phone" with
+     no explanation — and then the saveLocal() at the end of the load wrote an
+     empty tree straight over the data it had failed to read. Now every key
+     stands or falls alone, and anything unreadable is copied aside under
+     "<key>.corrupt.<ts>" instead of being destroyed. */
+  var loadFailures=[];
+  function readJSON(key){
+    var raw=null;
+    try{ raw=localStorage.getItem(key); }catch(e){ return null; }
+    if(raw===null||raw===undefined||raw==="") return null;
+    try{ return JSON.parse(raw); }
+    catch(e){
+      loadFailures.push(key);
+      try{ localStorage.setItem(key+".corrupt."+Date.now(),raw); }catch(e2){}
+      return null;
+    }
+  }
+  var treeUnreadable=false;
+  function loadLocal(){
+    var t=readJSON(K_TREE);
+    if(t&&typeof t==='object'){ localTree=t; }
+    else{
+      if(loadFailures.indexOf(K_TREE)>=0) treeUnreadable=true;
+      var d2=readJSON("attendance.register.v2");
+      var d1=readJSON("attendance.register.v1");
+      if(d2){ localTree=stateToTree({kids:d2.kids||[]}); ui.activeKidId=d2.activeKidId||null; }
+      else if(d1){ var p=PALETTE[0];
+        localTree=stateToTree({kids:[{id:"k"+Date.now(),name:d1.name||"My kid",emoji:"🌟",color:p.c,soft:p.soft,classes:d1.classes||[]}]}); }
+    }
+    var uu=readJSON(K_UI); if(uu&&uu.activeKidId) ui.activeKidId=uu.activeKidId;
+    var sc=readJSON(K_SYNC); if(sc&&sc.dbUrl&&sc.code) syncCfg=sc;
+    var q=readJSON(K_QUEUE); if(q&&typeof q.length==="number") queue=q;
+    var dv=readJSON(K_DEV); if(dv&&dv.id) device=dv;
+    if(!device||!device.id){ device={id:newDeviceId(),name:guessDeviceName()}; saveDevice(); }
+    if(!localTree||typeof localTree!=='object') localTree={meta:{kids:{}},records:{}};
+    rebuildState();
+    /* Never write over a tree we could not read. Persist only the UI hint. */
+    if(treeUnreadable){ try{ localStorage.setItem(K_UI,JSON.stringify(ui)); }catch(e){} }
+    else saveLocal();
+  }
+  function kidId(){ return "k"+Date.now()+Math.floor(Math.random()*9999); }
+  function classId(){ return "c"+Date.now()+Math.floor(Math.random()*9999); }
+  function activeKid(){ return state.kids.filter(function(k){return k.id===state.activeKidId;})[0]||null; }
+
+  /* ================= MUTATIONS (local + sync) ================= */
+  function applyOps(ops){
+    ops.forEach(function(op){ localTree=applyRest(localTree,op); });
+    rebuildState(); saveLocal();
+    if(syncOn()){ ops.forEach(function(op){ queue.push(op); }); saveQueue(); scheduleFlush(); }
+  }
+
+  /* ================= UNDO SNAPSHOT ================= */
+  /* One Firebase space is not a backup, and adopting a remote tree is
+     destructive: whatever this phone held is gone the instant saveLocal() runs.
+     Before any adoption that LOSES data we stash the outgoing tree here, so a
+     wipe is recoverable on the phone itself without a backup file. */
+  function saveTrash(tree,reason){
+    try{ localStorage.setItem(K_TRASH,JSON.stringify({ts:Date.now(),reason:reason||"",tree:tree})); }catch(e){}
+  }
+  function readTrash(){
+    var t=readJSON(K_TRASH);
+    if(!t||!t.tree||!t.ts) return null;
+    if((Date.now()-t.ts)>TRASH_KEEP_DAYS*86400000) return null;
+    if(!treeHasKids(t.tree)) return null;
+    return t;
+  }
+  function clearTrash(){ try{ localStorage.removeItem(K_TRASH); }catch(e){} }
+
+  /* ================= SYNC ================= */
+  var syncCfg=null, queue=[], flushing=false, pulling=false, pollTimer=null, status="local";
+  var pendingAdopt=null;   /* a remote tree held back awaiting the owner's decision */
+  var justRestored=false;  /* session flag: show the undo banner */
+  function syncOn(){ return !!(syncCfg&&syncCfg.dbUrl&&syncCfg.code); }
+
+  /* ---- Who else is on this space? -------------------------------------------
+     Each phone writes a heartbeat to devices/<id>. pull() already GETs the
+     whole space, so reading the other phone's heartbeat costs nothing extra.
+     Heartbeats are sent directly, never through the op queue: they are not
+     data, they must not be replayed, and they must never fail a flush.        */
+  var device=null, remoteDevices={}, lastBeat=0;
+  function newDeviceId(){ return "d"+Date.now().toString(36)+Math.floor(Math.random()*1679616).toString(36); }
+  function guessDeviceName(){
+    var ua=navigator.userAgent||"";
+    if(/iPad/.test(ua)) return "iPad";
+    if(/iPhone/.test(ua)) return "iPhone";
+    if(/Android/.test(ua)) return "Android phone";
+    return "This phone";
+  }
+  function saveDevice(){ try{ localStorage.setItem(K_DEV,JSON.stringify(device)); }catch(e){} }
+  function beat(force){
+    if(!syncOn()||!device) return Promise.resolve();
+    var now=Date.now();
+    if(!force && now-lastBeat<45000) return Promise.resolve();
+    lastBeat=now;
+    return apiSend({method:"PUT",path:"devices/"+device.id,body:{name:device.name,ts:{".sv":"timestamp"}}})
+      .catch(function(){ lastBeat=0; });
+  }
+  /* Other phones seen on this space, newest first. Ages are measured against
+     the newest heartbeat rather than this phone's clock, so a wrong clock on
+     either phone can't make "last seen" nonsense. */
+  function otherDevices(){
+    var mine=device?device.id:"", out=[], nowRef=0;
+    Object.keys(remoteDevices||{}).forEach(function(id){
+      var d=remoteDevices[id]||{}, ts=(typeof d.ts==="number")?d.ts:null;
+      if(ts!==null&&ts>nowRef) nowRef=ts;
+      if(id!==mine) out.push({id:id,name:d.name||"Other phone",ts:ts});
+    });
+    if(!nowRef) nowRef=Date.now();
+    out.forEach(function(d){ d.age=(d.ts===null)?null:Math.max(0,nowRef-d.ts); });
+    return out.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  }
+  function agoText(ms){
+    if(ms===null||ms===undefined) return "last seen unknown";
+    var s=Math.round(ms/1000);
+    if(s<15) return "active now";
+    if(s<90) return "seen "+s+"s ago";
+    var m=Math.round(s/60); if(m<90) return "seen "+m+" min ago";
+    var h=Math.round(m/60); if(h<48) return "seen "+h+"h ago";
+    return "seen "+Math.round(h/24)+" days ago";
+  }
+  function saveSync(){ try{ syncCfg?localStorage.setItem(K_SYNC,JSON.stringify(syncCfg)):localStorage.removeItem(K_SYNC); }catch(e){} }
+  function saveQueue(){ try{ localStorage.setItem(K_QUEUE,JSON.stringify(queue)); }catch(e){} }
+  function cleanUrl(u){ return (u||"").trim().replace(/\/+$/,""); }
+  function cleanCode(c){ return (c||"").trim().replace(/[^a-zA-Z0-9_-]/g,"-").replace(/^-+|-+$/g,""); }
+  function baseUrl(cfg){ cfg=cfg||syncCfg; return cleanUrl(cfg.dbUrl)+"/spaces/"+encodeURIComponent(cleanCode(cfg.code)); }
+  function urlFor(path,cfg){ return baseUrl(cfg)+(path?"/"+path:"")+".json"; }
+
+  function httpErr(r){ var e=new Error("HTTP "+r.status); e.status=r.status; return e; }
+  /* Firebase answers a wrong-region address with 400 and a body naming the right
+     one. Databases outside us-central1 (e.g. asia-southeast1) live on
+     *.firebasedatabase.app, not *.firebaseio.com, so this is an easy mistake to
+     make and it otherwise surfaces as a bare "Offline" with no explanation. */
+  function failFrom(r){
+    return r.json().catch(function(){ return null; }).then(function(body){
+      var e=httpErr(r);
+      if(body&&body.correctUrl) e.correctUrl=String(body.correctUrl).replace(/\/+$/,"");
+      if(body&&body.error) e.detail=String(body.error);
+      throw e;
+    });
+  }
+  function isWrongRegion(e){ return !!(e&&e.correctUrl); }
+  /* 401/403 from Firebase means the rules rejected us — almost always because
+     test-mode rules expired. That is a different problem from being offline and
+     must not be reported as one, or the app dies quietly 30 days after setup. */
+  function isDenied(e){ return !!(e&&(e.status===401||e.status===403)); }
+  function apiGet(path,cfg){ return fetch(urlFor(path,cfg),{cache:"no-store"}).then(function(r){ if(!r.ok) return failFrom(r); return r.json(); }); }
+  function apiSend(op,cfg){
+    var init={method:op.method};
+    if(op.method==="PUT"||op.method==="PATCH"){ init.headers={"Content-Type":"application/json"}; init.body=JSON.stringify(op.body===undefined?null:op.body); }
+    return fetch(urlFor(op.path,cfg),init).then(function(r){ if(!r.ok) return failFrom(r); return true; });
+  }
+
+  /* The rules a space needs in order to keep working indefinitely. Firebase's
+     "test mode" rules contain an expiry date and flip to deny-all after 30 days,
+     which silently kills sync. These have no expiry: the space code is the
+     secret, and because there is no read permission above /spaces/$code, nobody
+     can list spaces or read the database root. */
+  var PERM_RULES='{\n  "rules": {\n    ".read": false,\n    ".write": false,\n    "spaces": {\n      "$code": {\n        ".read": true,\n        ".write": true\n      }\n    }\n  }\n}';
+
+  function setStatus(s){ status=s; renderStatus(); renderBanner(); }
+  /* A persistent, explicit banner for the one failure that would otherwise end
+     this app quietly: expired database rules. */
+  function renderBanner(){
+    var b=document.getElementById("banner");
+    if(!b) return;
+    /* Highest priority: a destructive change is waiting on a decision. */
+    if(pendingAdopt){
+      var L=pendingAdopt.loss;
+      var what=[];
+      if(L.kidsLost>0) what.push(L.kidsLost+" kid"+(L.kidsLost===1?"":"s"));
+      if(L.daysLost>0) what.push(L.daysLost+" marked day"+(L.daysLost===1?"":"s"));
+      b.className="banner show";
+      b.innerHTML='<b>⚠ The shared space wants to remove data</b>'+
+        '<p>The other phone\u2019s copy is missing <b>'+what.join(" and ")+'</b> that this phone has. '+
+        'Nothing has been changed here yet. If someone deleted these on purpose, accept it. '+
+        'If this is unexpected \u2014 a wrong space code, or an accidental delete \u2014 keep this phone\u2019s copy and it will be pushed back up.</p>'+
+        '<button class="btn ghost" id="bannerKeepMine">Keep this phone\u2019s copy</button>'+
+        '<button class="btn warn" id="bannerAccept">Accept the removal</button>';
+      document.getElementById("bannerKeepMine").addEventListener("click",function(){
+        var mine=localTree; pendingAdopt=null;
+        setStatus("syncing");
+        apiSend({method:"PUT",path:"meta",body:metaForWrite(mine)})
+          .then(function(){ return apiSend({method:"PUT",path:"records",body:mine.records||{}}); })
+          .then(bumpRev)
+          .then(function(){ lastRev=null; lastFull=0; startPolling(); setStatus("synced"); toast("This phone\u2019s copy kept and shared"); },
+                function(e){ startPolling(); setStatus(isDenied(e)?"denied":"offline"); });
+      });
+      document.getElementById("bannerAccept").addEventListener("click",function(){
+        var incoming=pendingAdopt.tree; pendingAdopt=null;
+        saveTrash(localTree,"removal accepted from the shared space");
+        localTree=incoming; rebuildState(); saveLocal(); render();
+        justRestored=true; lastRev=null; lastFull=0; startPolling(); setStatus("synced");
+        renderBackupNote(); renderUndoBtn(); toast("Change applied \u2014 undo is available below");
+      });
+      return;
+    }
+    if(treeUnreadable){
+      b.className="banner show";
+      b.innerHTML='<b>⚠ This phone\u2019s saved data could not be read</b>'+
+        '<p>The stored copy was damaged, so the app started empty. <b>It has not been overwritten</b> \u2014 the '+
+        'unreadable copy was kept aside. Restore from a backup file if you have one, or turn on sharing to pull '+
+        'your data back from the other phone.</p>'+
+        '<button class="btn ghost" id="bannerDismiss">Got it</button>';
+      document.getElementById("bannerDismiss").addEventListener("click",function(){ treeUnreadable=false; renderBanner(); });
+      return;
+    }
+    if(justRestored&&readTrash()){
+      b.className="banner show";
+      b.innerHTML='<b>Data on this phone was just replaced</b>'+
+        '<p>The copy from before the change was saved and can be put back.</p>'+
+        '<button class="btn primary" id="bannerUndo">Undo \u2014 put the old copy back</button>'+
+        '<button class="btn ghost" id="bannerUndoNo">Keep the change</button>';
+      document.getElementById("bannerUndo").addEventListener("click",function(){ undoLastReplace(); });
+      document.getElementById("bannerUndoNo").addEventListener("click",function(){ justRestored=false; renderBanner(); });
+      return;
+    }
+    if(syncOn()&&status==="badurl"&&suggestedUrl){
+      b.className="banner show";
+      b.innerHTML='<b>⚠ Wrong database address</b>'+
+        '<p>This phone is pointed at an address your database does not live at, so sync is stopped. '+
+        'Your data on this phone is safe. Firebase says the correct address is:</p>'+
+        '<div class="rules">'+escapeHtml(suggestedUrl)+'</div>'+
+        '<button class="btn primary" id="bannerUrlFix">Use this address</button>';
+      document.getElementById("bannerUrlFix").addEventListener("click",function(){
+        syncCfg.dbUrl=suggestedUrl; saveSync(); suggestedUrl=null;
+        lastRev=null; lastFull=0; setStatus("syncing"); scheduleFlush(); beat(true); pull(true);
+        toast("Address updated");
+      });
+      return;
+    }
+    if(syncOn()&&status==="denied"){
+      b.className="banner show";
+      b.innerHTML='<b>⚠ Your database is refusing this app</b>'+
+        '<p>Sync is blocked, so the two phones are no longer sharing. Your data on this phone is safe. '+
+        'The usual cause is Firebase <b>test mode rules expiring</b> — they lapse 30 days after setup.</p>'+
+        '<button class="btn ghost" id="bannerFix">Show me how to fix it</button>';
+      document.getElementById("bannerFix").addEventListener("click",openRulesSheet);
+    } else { b.className="banner"; b.innerHTML=""; }
+  }
+  /* Put the pre-change copy back, and push it up so the other phone follows.
+     A union with what is on the phone now, so anything marked since the wipe
+     is not thrown away by the undo itself. */
+  function undoLastReplace(){
+    var t=readTrash();
+    if(!t){ toast("Nothing to undo"); return; }
+    var restored=mergeTrees(localTree,t.tree);
+    localTree=restored; rebuildState(); saveLocal(); render();
+    clearTrash(); justRestored=false;
+    renderBanner(); renderBackupNote(); renderUndoBtn();
+    if(syncOn()){
+      setStatus("syncing");
+      apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+        .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+        .then(bumpRev)
+        .then(function(){ lastRev=null; lastFull=0; setStatus("synced"); toast("Old copy restored and shared"); },
+              function(e){ setStatus(isDenied(e)?"denied":"offline"); toast("Restored on this phone; will share when online"); });
+    } else toast("Old copy restored");
+  }
+  function rulesBlockHTML(title,intro){
+    return '<div class="guide"><b>'+title+'</b><p>'+intro+'</p>'+
+      '<ol><li>Open <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> and pick your project.</li>'+
+      '<li>Go to <b>Build → Realtime Database</b>, then the <b>Rules</b> tab.</li>'+
+      '<li>Replace everything there with the text below, then click <b>Publish</b>.</li></ol>'+
+      '<pre class="rules" id="rulesText">'+escapeHtml(PERM_RULES)+'</pre>'+
+      '<button class="btn ghost" id="rulesCopy">Copy these rules</button></div>';
+  }
+  function wireRulesCopy(){
+    var el=document.getElementById("rulesCopy"); if(!el) return;
+    el.addEventListener("click",function(){
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(PERM_RULES).then(function(){ toast("Rules copied"); },function(){ toast("Long-press the text to copy"); });
+      } else toast("Long-press the text to copy");
+    });
+  }
+  function openRulesSheet(){
+    sheet.innerHTML='<h3>Keep sync working permanently</h3>'+
+      rulesBlockHTML("Set rules that never expire",
+        "These replace Firebase\u2019s temporary test-mode rules. They have no expiry date, and they stop anyone from reading your database root or listing spaces \u2014 your space code stays the secret.")+
+      '<p class="disc">Anyone who knows both the database address and your space code can still read the data, so keep the code private. A longer, less guessable code is safer.</p>'+
+      '<div class="actions col"><button class="btn primary" id="rulesRetry">I\u2019ve published them \u2014 try again</button><button class="btn ghost" id="rulesClose">Close</button></div>';
+    overlay.classList.add("show");
+    wireRulesCopy();
+    document.getElementById("rulesClose").addEventListener("click",closeModal);
+    document.getElementById("rulesRetry").addEventListener("click",function(){
+      closeModal(); setStatus("syncing"); lastRev=null; lastFull=0; scheduleFlush(); pull(true);
+    });
+  }
+  function renderStatus(){
+    var pill=document.getElementById("statusPill"), txt=document.getElementById("statusText");
+    if(!syncOn()){ pill.className="pill local"; txt.textContent="On this phone"; return; }
+    if(status==="syncing"){ pill.className="pill syncing"; txt.textContent="Syncing…"; return; }
+    if(status==="denied"){ pill.className="pill denied"; txt.textContent="Access blocked"; return; }
+    if(status==="badurl"){ pill.className="pill denied"; txt.textContent="Wrong address"; return; }
+    if(status==="offline"){ pill.className="pill offline"; txt.textContent="Offline"; return; }
+    /* "Synced" used to mean only "I reached my own space", which let two phones
+       on two different spaces both claim to be synced. Report the phone count. */
+    var others=otherDevices().length;
+    pill.className="pill "+(others?"synced":"alone");
+    txt.textContent = others ? ("Synced · "+(others+1)+" phones") : "Synced · 1 phone";
+  }
+
+  function scheduleFlush(){ flush().catch(function(){}); }
+  function flush(){
+    if(!syncOn()||flushing||!queue.length) return Promise.resolve();
+    flushing=true; setStatus("syncing");
+    function step(){
+      if(!queue.length){ flushing=false; return bumpRev().then(function(){ setStatus("synced"); }); }
+      var op=queue[0];
+      return apiSend(op).then(function(){ queue.shift(); saveQueue(); return step(); })
+        .catch(function(e){ flushing=false;
+          if(isWrongRegion(e)){ suggestedUrl=e.correctUrl; setStatus("badurl"); }
+          else setStatus(isDenied(e)?"denied":"offline");
+          throw e; });
+    }
+    return step();
+  }
+  /* ---- Bandwidth: poll a tiny revision marker, not the whole database --------
+     The free Firebase tier allows 10 GB of downloads a month. Re-fetching the
+     entire space every 4s grows without bound as years of records accumulate and
+     would eventually exhaust that quota, at which point reads start failing. So
+     the 4s poll now GETs `rev` (a few bytes) and only fetches the full tree when
+     it has actually changed. A full resync also runs at least every FULL_MS as a
+     safety net, in case a writer died before it could bump `rev`.             */
+  /* FULL_MS is only a safety net for a `rev` bump that never landed. Opening or
+     focusing the app already forces a full resync, so this can be generous —
+     which keeps monthly downloads flat even after years of accumulated records. */
+  var suggestedUrl=null;
+  var lastRev=null, lastFull=0, FULL_MS=600000;
+  function bumpRev(){
+    if(!syncOn()) return Promise.resolve();
+    /* our own next poll should re-read the tree to confirm the write landed */
+    lastRev=null;
+    return apiSend({method:"PUT",path:"rev",body:{".sv":"timestamp"}}).catch(function(){});
+  }
+  function pull(force){
+    if(!syncOn()||pulling) return;
+    if(pendingAdopt) return;                                                   // waiting on the owner; don't re-ask every 4s
+    if(document.getElementById("overlay").classList.contains("show")) return; // don't disrupt open dialogs
+    if(queue.length){ scheduleFlush(); return; }
+    pulling=true;
+    var forceBeat=false;
+    var now=Date.now();
+    var needFull=!!force||!lastFull||(now-lastFull)>=FULL_MS;
+    var decide = needFull ? Promise.resolve(true) : apiGet("rev").then(function(rev){
+      if(rev===null) return true;              // legacy space with no marker yet
+      if(rev!==lastRev){ return true; }        // somebody changed something
+      return false;                            // nothing to do — a few bytes spent
+    });
+    decide.then(function(full){
+      if(!full) return;                        // cheap path
+      return apiGet("").then(function(tree){
+        remoteDevices=(tree&&tree.devices)||{};
+        /* If this phone's heartbeat isn't in the space, re-register immediately
+           instead of waiting out the throttle. Covers a space that was cleared,
+           recreated, or joined for the first time — otherwise the pill would
+           under-report the phone count for up to 45s. */
+        forceBeat=!!(device&&!remoteDevices[device.id]);
+        lastFull=Date.now();
+        lastRev=(tree&&tree.rev!==undefined)?tree.rev:null;
+        /* Guard: never let a blank (or devices-only) space silently wipe real data
+           on this phone — re-seed it from here instead. A space that is empty but
+           carries the seeded marker was emptied on purpose, so that IS adopted.
+           meta and records are written separately so heartbeats survive. */
+        if(!treeHasKids(tree)&&!spaceIsSeeded(tree)){
+          if(treeHasKids(localTree)){
+            return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+              .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+              .then(bumpRev);
+          }
+          return;
+        }
+        var incoming={meta:tree.meta||{kids:{}},records:tree.records||{}};
+        /* An empty-but-seeded space is a deliberate deletion and used to be
+           adopted silently, which means one accidental delete — or one wrong
+           space code — wiped every phone within 4 seconds with no undo. A
+           wipe-level change is now held back and the owner decides. Normal
+           edits (a day marked or unmarked elsewhere) pass straight through. */
+        var loss=adoptionLoss(localTree,incoming);
+        if(lossNeedsConsent(loss)){
+          pendingAdopt={tree:incoming,loss:loss};
+          stopPolling();
+          renderBanner();
+          return;
+        }
+        if(loss.daysLost>0) saveTrash(localTree,"replaced by the shared space");
+        localTree=incoming;
+        rebuildState(); saveLocal(); render();
+        if(lastRev===null) return bumpRev();   // seed the marker for a legacy space
+      });
+    }).then(function(){ return beat(forceBeat); })
+      .then(function(){ setStatus("synced"); })
+      .catch(function(e){
+        if(isWrongRegion(e)){ suggestedUrl=e.correctUrl; setStatus("badurl"); }
+        else setStatus(isDenied(e)?"denied":"offline");
+      })
+      .then(function(){ pulling=false; });
+  }
+  /* Polling stops while the app is in the background: it saves the free tier's
+     download quota and the phone's battery, and a hidden tab has nothing to show
+     anyway. Coming back to the app forces an immediate full resync. */
+  function startPolling(){ stopPolling(); if(syncOn()){ pollTimer=setInterval(function(){ pull(); },4000); } }
+  function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
+
+  /* ================= DATES / RANGE / CALENDAR (unchanged core) ================= */
+  function todayISO(){ return toISO(new Date()); }
+  function toISO(d){ return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
+  function fromISO(s){ var p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
+  function shiftDay(iso,n){ var d=fromISO(iso); d.setDate(d.getDate()+n); return toISO(d); }
+  function prettyDate(iso){ var d=fromISO(iso);
+    var wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+    var mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+    return wd+", "+mo+" "+d.getDate()+", "+d.getFullYear(); }
+  function resolveRange(){
+    var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+    if(range.mode==="month")  return {from:toISO(new Date(y,m,1)),to:toISO(new Date(y,m+1,0)),label:"this month"};
+    if(range.mode==="year")   return {from:toISO(new Date(y,0,1)),to:toISO(new Date(y,11,31)),label:"this year"};
+    if(range.mode==="30")     return {from:shiftDay(todayISO(),-29),to:todayISO(),label:"last 30 days"};
+    if(range.mode==="custom") return {from:range.from||"0000-01-01",to:range.to||"9999-12-31",label:"your dates"};
+    return {from:"0000-01-01",to:"9999-12-31",label:"all time"};
+  }
+  function countInRange(cls,r){ var n=0; for(var k in cls.records){ if(cls.records[k]&&k>=r.from&&k<=r.to) n++; } return n; }
+  function countAll(cls){ var n=0; for(var k in cls.records){ if(cls.records[k]) n++; } return n; }
+
+  function firstOfMonthISO(iso){ return iso.slice(0,7)+"-01"; }
+  function calendarWindow(cls,r){
+    var recs=Object.keys(cls.records).filter(function(k){return cls.records[k];}).sort();
+    var todayI=todayISO(),start,end;
+    if(r.from==="0000-01-01") start=recs.length?recs[0]:firstOfMonthISO(todayI); else start=r.from;
+    if(r.to==="9999-12-31"){ end=todayI; if(recs.length&&recs[recs.length-1]>end) end=recs[recs.length-1]; }
+    else if(range.mode==="year"||range.mode==="30"||range.mode==="month"){ end=(r.to>todayI?todayI:r.to); }
+    else end=r.to;
+    if(end<start) end=start;
+    return {start:start,end:end};
+  }
+  var MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  function monthGridHTML(year,month,cls,r,kid){
+    var startDow=new Date(year,month,1).getDay(),dim=new Date(year,month+1,0).getDate(),todayI=todayISO(),cells="";
+    for(var i=0;i<startDow;i++) cells+='<span class="cal-cell blank"></span>';
+    for(var d=1;d<=dim;d++){
+      var iso=year+"-"+("0"+(month+1)).slice(-2)+"-"+("0"+d).slice(-2);
+      var present=!!cls.records[iso],inRange=iso>=r.from&&iso<=r.to;
+      var cl="cal-cell"+(present?" present":"")+(inRange?"":" out")+(iso===todayI?" today":"");
+      var style=present?' style="background:'+kid.color+'"':'';
+      cells+='<button class="'+cl+'" data-date="'+iso+'"'+style+'>'+d+'</button>';
+    }
+    return '<div class="cal-month"><div class="cal-title">'+MONTHS[month]+' '+year+'</div>'+
+      '<div class="cal-dow"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>'+
+      '<div class="cal-grid">'+cells+'</div></div>';
+  }
+  function calendarHTML(cls,r,kid){
+    var w=calendarWindow(cls,r),sd=fromISO(w.start),ed=fromISO(w.end);
+    var months=[],y=sd.getFullYear(),m=sd.getMonth(),ey=ed.getFullYear(),em=ed.getMonth();
+    while(y<ey||(y===ey&&m<=em)){ months.push([y,m]); m++; if(m>11){m=0;y++;} if(months.length>72) break; }
+    var truncated=false; if(months.length>36){ months=months.slice(months.length-36); truncated=true; }
+    var html='<div class="cal-legend"><span><i style="background:'+kid.color+'"></i>Attended</span><span><i style="box-shadow:inset 0 0 0 2px var(--accent);background:var(--bg)"></i>Today</span></div>';
+    if(truncated) html+='<div class="cal-note">Showing the most recent 36 months.</div>';
+    months.forEach(function(ym){ html+=monthGridHTML(ym[0],ym[1],cls,r,kid); });
+    return html;
+  }
+  function starSVG(color){ return '<svg width="22" height="22" viewBox="0 0 24 24" fill="'+color+'" stroke="rgba(0,0,0,.12)" stroke-width="1"><path d="M12 2.2l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.06 6.19 20.1 7.3 13.63 2.6 9.05l6.5-.95z"/></svg>'; }
+  function starsMarkup(count,color){ if(count===0) return '<span class="empty">No stars yet — mark a day to add one.</span>';
+    var cap=30,html="",n=Math.min(count,cap); for(var i=0;i<n;i++) html+=starSVG(color); if(count>cap) html+='<span class="more">+'+(count-cap)+'</span>'; return html; }
+
+  function applyTheme(kid){ var root=document.documentElement.style;
+    if(kid){ root.setProperty("--accent",kid.color); root.setProperty("--accent-soft",kid.soft); root.setProperty("--kidc",kid.color); }
+    else{ root.setProperty("--accent","#7A5CF0"); root.setProperty("--accent-soft","#EEE9FE"); root.setProperty("--kidc","#7A5CF0"); } }
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+
+  /* ================= RENDER ================= */
+  var kidbar=document.getElementById("kidbar"), cardsEl=document.getElementById("cards");
+  function renderKidbar(){
+    kidbar.innerHTML="";
+    state.kids.forEach(function(k){
+      var b=document.createElement("button");
+      b.className="kid"+(k.id===state.activeKidId?" active":"");
+      b.style.setProperty("--kidc",k.color);
+      b.innerHTML='<span class="bubble" style="background:'+k.soft+'">'+k.emoji+'</span><span class="kn">'+escapeHtml(k.name)+'</span>';
+      b.addEventListener("click",function(){ state.activeKidId=k.id; ui.activeKidId=k.id; saveLocal(); render(); });
+      kidbar.appendChild(b);
+    });
+    var add=document.createElement("button"); add.className="kid add";
+    add.innerHTML='<span class="bubble">+</span><span class="kn">Add kid</span>';
+    add.addEventListener("click",openAddKid); kidbar.appendChild(add);
+  }
+  function render(){
+    renderBackupNote();
+    var kid=activeKid(); applyTheme(kid); renderKidbar(); renderStatus();
+    var hasKid=!!kid;
+    document.getElementById("markingBar").style.display=hasKid?"":"none";
+    document.getElementById("rangeWrap").style.display=hasKid?"":"none";
+    document.getElementById("addClass").style.display=hasKid?"":"none";
+    document.getElementById("editKid").style.display=hasKid?"":"none";
+    document.getElementById("hAva").textContent=hasKid?kid.emoji:"🙂";
+    document.getElementById("kidName").textContent=hasKid?kid.name:"Add your first kid";
+    if(!hasKid){ cardsEl.innerHTML='<div class="empty-state"><span class="em">🧒</span><b>No kids yet</b>Tap the dashed circle above to add your first kid, give them a color and an animal, then start marking classes.</div>'; return; }
+
+    var isToday=(markDate===todayISO());
+    document.getElementById("markDateText").textContent=isToday?"Today":prettyDate(markDate).split(", ").slice(0,2).join(", ");
+    document.getElementById("markDateSub").textContent=isToday?prettyDate(markDate):prettyDate(markDate).split(", ").slice(2).join("");
+    document.getElementById("jumpToday").disabled=isToday;
+    document.getElementById("markDatePicker").value=markDate;
+
+    var r=resolveRange();
+    if(!kid.classes.length){ cardsEl.innerHTML='<div class="empty-state"><span class="em">📚</span><b>No classes yet for '+escapeHtml(kid.name)+'</b>Add a class below — piano, swimming, tuition — then mark the days they show up.</div>'; return; }
+
+    cardsEl.innerHTML="";
+    kid.classes.forEach(function(cls){
+      var inRange=countInRange(cls,r),all=countAll(cls),present=!!cls.records[markDate];
+      var card=document.createElement("div"); card.className="card";
+      card.innerHTML=
+        '<div class="card-top"><div class="cname"></div><button class="menu-btn" aria-label="Options">⋯</button></div>'+
+        '<div class="readout"><span class="bignum">'+inRange+'</span><span class="unit">day'+(inRange===1?'':'s')+' · '+r.label+'</span>'+
+          '<span class="alltime">all time<b>'+all+'</b></span></div>'+
+        '<div class="stars">'+starsMarkup(inRange,kid.color)+'</div>'+
+        '<button class="mark-btn'+(present?' on':'')+'">'+
+          (present?'<span class="tick">✓</span> Present '+(isToday?'today':'this day'):'Mark present '+(isToday?'today':'this day'))+'</button>'+
+        '<div class="cal-toggle-row"><button class="cal-toggle">'+(openCals[cls.id]?'▲ Hide calendar':'📅 Show calendar')+'</button></div>'+
+        (openCals[cls.id]?('<div class="cal">'+calendarHTML(cls,r,kid)+'</div>'):'');
+      card.querySelector(".cname").textContent=cls.name;
+      var btn=card.querySelector(".mark-btn");
+      btn.addEventListener("click",function(){
+        var turningOn=!cls.records[markDate];
+        applyOps(opMarkDay(kid.id,cls.id,markDate,turningOn));
+        if(turningOn) celebrate(btn,kid.color);
+        render();
+      });
+      card.querySelector(".menu-btn").addEventListener("click",function(){ openClassMenu(kid,cls); });
+      card.querySelector(".cal-toggle").addEventListener("click",function(){ if(openCals[cls.id]) delete openCals[cls.id]; else openCals[cls.id]=true; render(); });
+      var calEl=card.querySelector(".cal");
+      if(calEl){ calEl.addEventListener("click",function(e){
+        var c=e.target.closest(".cal-cell"); if(!c) return; var d=c.getAttribute("data-date"); if(!d) return;
+        var turningOn=!cls.records[d];
+        applyOps(opMarkDay(kid.id,cls.id,d,turningOn));
+        if(turningOn) celebrate(c,kid.color);
+        render();
+      }); }
+      cardsEl.appendChild(card);
+    });
+  }
+
+  function celebrate(btn,color){
+    if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion:reduce)").matches) return;
+    /* Purely decorative: it must never be able to stop the caller from
+       re-rendering. Older browsers (and WebViews) have no Element.animate, so
+       feature-detect and swallow anything that goes wrong here. */
+    try{
+      var probe=document.createElement("div");
+      if(typeof probe.animate!=="function") return;
+      var rect=btn.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+      for(var i=0;i<9;i++){ (function(){ var s=document.createElement("div"); s.className="pop"; s.textContent="⭐";
+        s.style.left=cx+"px"; s.style.top=cy+"px"; document.body.appendChild(s);
+        var ang=(Math.random()*Math.PI)-Math.PI,dist=60+Math.random()*70,dx=Math.cos(ang)*dist,dy=-Math.abs(Math.sin(ang)*dist)-30-Math.random()*40;
+        s.animate([{transform:"translate(-50%,-50%) scale(.4) rotate(0deg)",opacity:1},{transform:"translate("+dx+"px,"+dy+"px) scale(1.1) rotate("+(Math.random()*360)+"deg)",opacity:0}],{duration:750+Math.random()*250,easing:"cubic-bezier(.2,.7,.3,1)"}).onfinish=function(){ s.remove(); };
+      })(); }
+    }catch(e){}
+  }
+
+  /* ================= CONTROLS ================= */
+  document.getElementById("prevDay").addEventListener("click",function(){ markDate=shiftDay(markDate,-1); render(); });
+  document.getElementById("nextDay").addEventListener("click",function(){ markDate=shiftDay(markDate,1); render(); });
+  document.getElementById("jumpToday").addEventListener("click",function(){ markDate=todayISO(); render(); });
+  document.getElementById("markDatePicker").addEventListener("change",function(e){ if(e.target.value){ markDate=e.target.value; render(); } });
+  var chips=document.getElementById("chips"), customDates=document.getElementById("customDates");
+  chips.addEventListener("click",function(e){ var b=e.target.closest(".chip"); if(!b) return;
+    range.mode=b.getAttribute("data-range");
+    Array.prototype.forEach.call(chips.children,function(c){ c.setAttribute("aria-pressed",c===b?"true":"false"); });
+    customDates.classList.toggle("show",range.mode==="custom");
+    if(range.mode==="custom"){ if(!range.from){ range.from=shiftDay(todayISO(),-29); document.getElementById("rangeFrom").value=range.from; } if(!range.to){ range.to=todayISO(); document.getElementById("rangeTo").value=range.to; } }
+    render();
+  });
+  document.getElementById("rangeFrom").addEventListener("change",function(e){ range.from=e.target.value; render(); });
+  document.getElementById("rangeTo").addEventListener("change",function(e){ range.to=e.target.value; render(); });
+
+  /* ================= MODALS ================= */
+  var overlay=document.getElementById("overlay"), sheet=document.getElementById("sheet");
+  function closeModal(){ overlay.classList.remove("show"); sheet.innerHTML=""; }
+  overlay.addEventListener("click",function(e){ if(e.target===overlay) closeModal(); });
+
+  function promptSheet(o){
+    sheet.innerHTML='<h3>'+o.title+'</h3>'+(o.desc?'<p>'+o.desc+'</p>':'')+
+      '<input type="text" id="sheetInput" placeholder="'+(o.placeholder||'')+'">'+
+      '<div class="actions"><button class="btn ghost" id="sheetCancel">Cancel</button><button class="btn primary" id="sheetOk">'+(o.confirmLabel||'Save')+'</button></div>';
+    overlay.classList.add("show");
+    var inp=document.getElementById("sheetInput"); inp.value=o.value||""; setTimeout(function(){ try{ inp.focus(); }catch(e){} },80);
+    function submit(){ var v=inp.value.trim(); if(!v){inp.focus();return;} closeModal(); o.onConfirm(v); }
+    document.getElementById("sheetOk").addEventListener("click",submit);
+    inp.addEventListener("keydown",function(e){ if(e.key==="Enter") submit(); });
+    document.getElementById("sheetCancel").addEventListener("click",closeModal);
+  }
+  function confirmSheet(o){
+    sheet.innerHTML='<h3>'+o.title+'</h3>'+(o.desc?'<p>'+o.desc+'</p>':'')+
+      '<div class="actions"><button class="btn ghost" id="sheetCancel">Cancel</button><button class="btn '+(o.danger?'warn':'primary')+'" id="sheetOk">'+(o.confirmLabel||'Confirm')+'</button></div>';
+    overlay.classList.add("show");
+    document.getElementById("sheetOk").addEventListener("click",function(){ closeModal(); o.onConfirm(); });
+    document.getElementById("sheetCancel").addEventListener("click",function(){ closeModal(); if(o.onCancel) o.onCancel(); });
+  }
+
+  function kidSheet(o){
+    var chosen={ emoji:o.emoji||EMOJIS[Math.floor(Math.random()*EMOJIS.length)], color:o.color||PALETTE[state.kids.length%PALETTE.length].c };
+    var softFor=function(c){ var p=PALETTE.filter(function(x){return x.c===c;})[0]; return p?p.soft:"#EEE9FE"; };
+    var eg=EMOJIS.map(function(e){ return '<button type="button" data-e="'+e+'" aria-pressed="'+(e===chosen.emoji)+'">'+e+'</button>'; }).join("");
+    var sw=PALETTE.map(function(p){ return '<button type="button" data-c="'+p.c+'" aria-pressed="'+(p.c===chosen.color)+'" style="background:'+p.c+'"></button>'; }).join("");
+    sheet.innerHTML='<h3>'+o.title+'</h3>'+
+      '<input type="text" id="kidNameInput" placeholder="Kid'+"'"+'s name" value="'+escapeHtml(o.name||"")+'">'+
+      '<p class="grid-label">Pick an animal</p><div class="emoji-grid" id="egrid">'+eg+'</div>'+
+      '<p class="grid-label">Pick a color</p><div class="swatches" id="swatches">'+sw+'</div>'+
+      '<div class="actions">'+(o.onDelete?'<button class="btn warn" id="kidDelete">Delete</button>':'')+
+        '<button class="btn ghost" id="kidCancel">Cancel</button><button class="btn primary" id="kidOk">'+(o.confirmLabel||'Save')+'</button></div>';
+    overlay.classList.add("show");
+    var eg2=document.getElementById("egrid"), sw2=document.getElementById("swatches");
+    eg2.addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b)return; chosen.emoji=b.getAttribute("data-e"); Array.prototype.forEach.call(eg2.children,function(c){ c.setAttribute("aria-pressed",c===b?"true":"false"); }); });
+    sw2.addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b)return; chosen.color=b.getAttribute("data-c"); Array.prototype.forEach.call(sw2.children,function(c){ c.setAttribute("aria-pressed",c===b?"true":"false"); }); });
+    document.getElementById("kidCancel").addEventListener("click",closeModal);
+    document.getElementById("kidOk").addEventListener("click",function(){ var name=document.getElementById("kidNameInput").value.trim(); if(!name){ document.getElementById("kidNameInput").focus(); return; } closeModal(); o.onConfirm({name:name,emoji:chosen.emoji,color:chosen.color,soft:softFor(chosen.color)}); });
+    if(o.onDelete) document.getElementById("kidDelete").addEventListener("click",function(){ closeModal(); o.onDelete(); });
+    setTimeout(function(){ var el=document.getElementById("kidNameInput"); if(el) el.focus(); },80);
+  }
+  function openAddKid(){ kidSheet({title:"Add a kid",confirmLabel:"Add kid",onConfirm:function(v){
+    var k={id:kidId(),name:v.name,emoji:v.emoji,color:v.color,soft:v.soft};
+    applyOps(opAddKid(k,state.kids.length)); state.activeKidId=k.id; ui.activeKidId=k.id; saveLocal(); render(); toast(v.name+" added ⭐"); }}); }
+  document.getElementById("editKid").addEventListener("click",function(){ var kid=activeKid(); if(!kid) return;
+    kidSheet({title:"Edit "+kid.name,name:kid.name,emoji:kid.emoji,color:kid.color,confirmLabel:"Save",
+      onConfirm:function(v){ applyOps(opEditKid({id:kid.id,name:v.name,emoji:v.emoji,color:v.color,soft:v.soft})); render(); },
+      onDelete:function(){ var cc=kid.classes.length;
+        confirmSheet({title:"Delete "+kid.name+"?",danger:true,confirmLabel:"Delete",
+          desc:"This removes "+kid.name+" and their "+cc+" class"+(cc===1?"":"es")+" with all stars. Can't be undone (except from a backup).",
+          onConfirm:function(){ applyOps(opDeleteKid(kid.id)); if(state.activeKidId===kid.id){ state.activeKidId=state.kids.length?state.kids[0].id:null; ui.activeKidId=state.activeKidId; saveLocal(); } render(); toast("Kid deleted"); }}); }});
+  });
+
+  document.getElementById("addClass").addEventListener("click",function(){ var kid=activeKid(); if(!kid) return;
+    promptSheet({title:"Add a class",desc:"What's it called?",placeholder:"e.g. Piano, Swimming, Math tuition",confirmLabel:"Add class",
+      onConfirm:function(name){ applyOps(opAddClass(kid.id,{id:classId(),name:name},kid.classes.length)); render(); toast("Class added"); }}); });
+  function openClassMenu(kid,cls){
+    sheet.innerHTML='<h3></h3><div class="actions col"><button class="btn ghost" id="mRename">Rename class</button><button class="btn warn" id="mDelete">Delete class</button><button class="btn ghost" id="mClose">Close</button></div>';
+    sheet.querySelector("h3").textContent=cls.name; overlay.classList.add("show");
+    document.getElementById("mClose").addEventListener("click",closeModal);
+    document.getElementById("mRename").addEventListener("click",function(){ closeModal();
+      promptSheet({title:"Rename class",value:cls.name,confirmLabel:"Save name",onConfirm:function(n){ applyOps(opRenameClass(kid.id,cls.id,n)); render(); }}); });
+    document.getElementById("mDelete").addEventListener("click",function(){ closeModal(); var total=countAll(cls);
+      confirmSheet({title:'Delete "'+cls.name+'"?',danger:true,confirmLabel:"Delete",
+        desc:"This removes the class and its "+total+" recorded day"+(total===1?"":"s")+". Can't be undone (except from a backup).",
+        onConfirm:function(){ applyOps(opDeleteClass(kid.id,cls.id)); render(); toast("Class deleted"); }}); });
+  }
+
+  /* ================= SYNC UI ================= */
+  document.getElementById("statusPill").addEventListener("click",openSyncSheet);
+  document.getElementById("syncBtn").addEventListener("click",openSyncSheet);
+  function openSyncSheet(){
+    if(syncOn()){
+      var others=otherDevices();
+      var fp=spaceFingerprint(cleanUrl(syncCfg.dbUrl),cleanCode(syncCfg.code));
+      var phonesHTML;
+      /* Nothing ever pruned devices/, so every wipe, reinstall or new browser
+         left a permanent extra entry and the phone count drifted upward. The
+         count is a trust signal — an inflated one hides exactly the desync it
+         was added to expose — so entries can now be removed here instead of in
+         the Firebase console, and very old ones are folded away by default. */
+      var staleMs=STALE_DEV_DAYS*86400000;
+      var fresh=others.filter(function(d){ return d.age===null||d.age<staleMs; });
+      var stale=others.filter(function(d){ return d.age!==null&&d.age>=staleMs; });
+      function devRow(d){
+        return '<div class="dev"><span>📱 '+escapeHtml(d.name)+'</span><b>'+agoText(d.age)+
+               ' <button type="button" class="dev-x" data-id="'+escapeHtml(d.id)+'" title="Remove this phone">\u2715</button></b></div>';
+      }
+      if(others.length){
+        phonesHTML='<div class="dev-list"><div class="dev"><span>📱 '+escapeHtml(device.name)+' <em>(this phone)</em></span><b>active now</b></div>'+
+          fresh.map(devRow).join("")+'</div>'+
+          (stale.length?'<p class="disc">'+stale.length+' phone'+(stale.length===1?'':'s')+' not seen in over '+STALE_DEV_DAYS+
+            ' days '+(stale.length===1?'is':'are')+' hidden. <a href="#" id="showStale">Show '+(stale.length===1?'it':'them')+'</a></p>'+
+            '<div class="dev-list" id="staleList" style="display:none">'+stale.map(devRow).join("")+'</div>':'')+
+          '<p class="disc">If a phone here is one you no longer use \u2014 or the same phone before it was wiped or reinstalled \u2014 remove it with \u2715 so the phone count stays truthful. Removing one only clears its last-seen marker; no attendance data is touched.</p>';
+      } else {
+        phonesHTML='<div class="warnbox"><b>⚠ No other phone is on this space</b>'+
+          '<p>Only this phone has ever connected here. If the other phone also says it is synced, the two are on <b>different</b> spaces — compare the Space ID below on both phones. They must match exactly.</p></div>'+
+          '<div class="dev-list"><div class="dev"><span>📱 '+escapeHtml(device.name)+' <em>(this phone)</em></span><b>active now</b></div></div>';
+      }
+      sheet.innerHTML='<h3>Sharing is on</h3>'+
+        '<div class="fp-box"><span class="fp-label">Space ID</span><span class="fp" id="shFp">'+fp+'</span>'+
+          '<span class="fp-note">Both phones must show these same 4 characters.</span></div>'+
+        '<p class="grid-label">Phones on this space</p>'+phonesHTML+
+        '<div class="share-box"><b>Share these with the other phone</b><div class="v" id="shDb"></div><b>Space code</b><div class="v" id="shCode" style="margin-bottom:0"></div></div>'+
+        '<p class="disc">On the other phone: open this same app, tap the status button up top, choose “Set up sharing”, and enter exactly these two values. The space code is <b>case-sensitive</b> — “Ruhaan” and “ruhaan” are two different spaces.</p>'+
+        '<label class="fld">Name this phone (so you can tell them apart)</label><input type="text" id="devName" maxlength="24">'+
+        '<div class="actions col"><button class="btn ghost" id="rulesOpen">Make sync permanent (database rules)</button><button class="btn ghost" id="devSave">Save phone name</button><button class="btn ghost" id="syncCopy">Copy details to share</button><button class="btn warn" id="syncOff">Turn off sharing on this phone</button><button class="btn ghost" id="syncClose">Close</button></div>';
+      overlay.classList.add("show");
+      document.getElementById("shDb").textContent=cleanUrl(syncCfg.dbUrl);
+      document.getElementById("shCode").textContent=cleanCode(syncCfg.code);
+      document.getElementById("devName").value=device.name;
+      document.getElementById("devSave").addEventListener("click",function(){
+        var v=document.getElementById("devName").value.trim();
+        if(!v) return; device.name=v; saveDevice(); beat(true).then(function(){ toast("Phone name saved"); });
+      });
+      document.getElementById("syncClose").addEventListener("click",closeModal);
+      var showStale=document.getElementById("showStale");
+      if(showStale) showStale.addEventListener("click",function(ev){
+        ev.preventDefault();
+        var l=document.getElementById("staleList"); if(l) l.style.display="";
+        showStale.parentNode.style.display="none";
+      });
+      Array.prototype.forEach.call(sheet.querySelectorAll(".dev-x"),function(btn){
+        btn.addEventListener("click",function(){
+          var id=btn.getAttribute("data-id");
+          var name=(remoteDevices[id]&&remoteDevices[id].name)||"that phone";
+          closeModal();
+          confirmSheet({title:"Remove "+name+"?",danger:true,confirmLabel:"Remove",
+            desc:"This clears its last-seen marker from the shared space. No kid, class or attendance data is affected. If that phone is still in use it will reappear the next time it opens the app.",
+            onConfirm:function(){
+              apiSend({method:"DELETE",path:"devices/"+encodeURIComponent(id)})
+                .then(function(){ delete remoteDevices[id]; renderStatus(); toast("Phone removed"); },
+                      function(){ toast("Couldn\u2019t remove it \u2014 check the connection"); });
+            }});
+        });
+      });
+      document.getElementById("rulesOpen").addEventListener("click",function(){ closeModal(); openRulesSheet(); });
+      document.getElementById("syncCopy").addEventListener("click",function(){
+        var txt="Attendance app sync\nDatabase URL: "+cleanUrl(syncCfg.dbUrl)+"\nSpace code: "+cleanCode(syncCfg.code);
+        if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){ toast("Copied — send it to the other phone"); },function(){ toast("Couldn't copy; long-press to select"); }); }
+        else toast("Long-press the text to copy");
+      });
+      document.getElementById("syncOff").addEventListener("click",function(){ closeModal();
+        confirmSheet({title:"Turn off sharing here?",desc:"This phone stops syncing and goes back to on-phone only. Your current data stays on this phone. The shared space and the other phone are not affected.",confirmLabel:"Turn off",
+          onConfirm:function(){ syncCfg=null; saveSync(); queue=[]; saveQueue(); if(pollTimer) clearInterval(pollTimer); setStatus("local"); toast("Sharing turned off"); }});
+      });
+    } else {
+      sheet.innerHTML='<h3>Share with another phone</h3>'+
+        '<p>Sync live between phones using your own free Google Firebase database. One-time setup, about 2 minutes.</p>'+
+        '<div class="guide"><b>Set up the free database (do this once, on either phone):</b>'+
+          '<ol>'+
+          '<li>Go to <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> and sign in with Google.</li>'+
+          '<li>Click <b>Add project</b>, give it any name, and finish (you can skip Analytics).</li>'+
+          '<li>In the left menu open <b>Build → Realtime Database</b>, click <b>Create Database</b>, pick a location, and choose <b>Start in test mode</b>.</li>'+
+          '<li>Copy the database web address shown at the top and paste it below. <b>Copy it exactly</b> — depending on the region you picked it ends in either <code>.firebaseio.com</code> or <code>.firebasedatabase.app</code> (e.g. <code>...asia-southeast1.firebasedatabase.app</code>). If you get it wrong the app will tell you the right one.</li>'+
+          '<li>Pick any <b>space code</b> — a long secret phrase you and your partner share (e.g. <code>sharma-family-7-tiger-lake</code>). Longer is safer.</li>'+
+          '</ol></div>'+
+        rulesBlockHTML("Important: do this too, or sync stops in 30 days",
+          "Firebase\u2019s \u201ctest mode\u201d rules expire after 30 days and then block everything. Publish these instead \u2014 they never expire.")+
+        '<label class="fld">Firebase database URL</label><input type="text" id="syncUrl" placeholder="https://your-project-default-rtdb.firebaseio.com">'+
+        '<label class="fld">Space code (shared secret)</label><input type="text" id="syncCode" placeholder="e.g. sharma-family-7">'+
+        '<div class="fp-box" id="fpPreview" style="display:none"><span class="fp-label">Space ID</span><span class="fp" id="fpVal">····</span>'+
+          '<span class="fp-note">Check this matches on both phones. The code is <b>case-sensitive</b> — all lowercase is safest.</span></div>'+
+        '<div class="result" id="syncResult"></div>'+
+        '<p class="disc">Anyone who has both the URL and the space code can see this data, so keep the code private. It’s stored in your own Firebase, not on Anthropic’s servers.</p>'+
+        '<div class="actions"><button class="btn ghost" id="syncTest">Test connection</button><button class="btn primary" id="syncGo">Turn on sync</button></div>'+
+        '<div class="actions" style="margin-top:10px;"><button class="btn ghost" id="syncClose2">Cancel</button></div>';
+      overlay.classList.add("show");
+      document.getElementById("syncClose2").addEventListener("click",closeModal);
+      wireRulesCopy();
+      var uIn=document.getElementById("syncUrl"), cIn=document.getElementById("syncCode");
+      var fpBox=document.getElementById("fpPreview"), fpVal=document.getElementById("fpVal");
+      function updateFp(){
+        var u=cleanUrl(uIn.value), c=cleanCode(cIn.value);
+        if(u&&c){ fpBox.style.display="block"; fpVal.textContent=spaceFingerprint(u,c); }
+        else fpBox.style.display="none";
+      }
+      uIn.addEventListener("input",updateFp); cIn.addEventListener("input",updateFp);
+      document.getElementById("syncTest").addEventListener("click",function(){
+        var url=cleanUrl(document.getElementById("syncUrl").value), code=cleanCode(document.getElementById("syncCode").value);
+        var res=document.getElementById("syncResult");
+        if(!url||!code){ res.className="result bad"; res.textContent="Please enter both the database URL and a space code."; return; }
+        res.className="result"; res.style.display="block"; res.textContent="Testing…";
+        var cfg={dbUrl:url,code:code}, b=baseUrl(cfg);
+        fetch(b+"/_conntest.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:"true"})
+          .then(function(r){ if(!r.ok) throw new Error("write failed (HTTP "+r.status+")"); return fetch(b+"/_conntest.json",{cache:"no-store"}); })
+          .then(function(r){ if(!r.ok) throw new Error("read failed (HTTP "+r.status+")"); return r.json(); })
+          .then(function(v){ if(v!==true) throw new Error("read-back mismatch"); return fetch(b+"/_conntest.json",{method:"DELETE"}); })
+          .then(function(){ res.className="result ok"; res.textContent="✓ Connection works. Reading and writing both succeeded — you can turn on sync."; })
+          .catch(function(e){
+            res.className="result bad";
+            if(isWrongRegion(e)){
+              res.innerHTML="\u2717 That address is for a different region. Your database is at:<div class=\"rules\">"+escapeHtml(e.correctUrl)+"</div><button class=\"btn ghost\" id=\"useCorrect\">Use this address</button>";
+              document.getElementById("useCorrect").addEventListener("click",function(){
+                document.getElementById("syncUrl").value=e.correctUrl;
+                document.getElementById("syncUrl").dispatchEvent(new Event("input",{bubbles:true}));
+                res.className="result"; res.textContent="Address filled in \u2014 tap Test connection again.";
+              });
+              return;
+            }
+            res.textContent="\u2717 Couldn't connect: "+e.message+". Check the address is copied exactly from Firebase, that Realtime Database is created, and that you're online.";
+          });
+      });
+      document.getElementById("syncGo").addEventListener("click",function(){
+        var url=cleanUrl(document.getElementById("syncUrl").value), code=cleanCode(document.getElementById("syncCode").value);
+        var res=document.getElementById("syncResult");
+        if(!url||!code){ res.className="result bad"; res.textContent="Please enter both the database URL and a space code."; return; }
+        connect(url,code);
+      });
+    }
+  }
+  function countTreeDays(tree){
+    var n=0, rec=(tree&&tree.records)||{};
+    Object.keys(rec).forEach(function(k){ Object.keys(rec[k]||{}).forEach(function(c){
+      var days=rec[k][c]||{}; for(var d in days){ if(days[d]) n++; } }); });
+    return n;
+  }
+  function joinSheet(cfg,tree){
+    var localDays=countTreeDays(localTree), sharedDays=countTreeDays(tree);
+    var localKids=Object.keys((localTree&&localTree.meta&&localTree.meta.kids)||{}).length;
+    var sharedKids=Object.keys((tree&&tree.meta&&tree.meta.kids)||{}).length;
+    sheet.innerHTML='<h3>This space already has data</h3>'+
+      '<p>Choose what happens to the marks currently on this phone.</p>'+
+      '<div class="share-box"><b>On this phone</b><div class="v">'+localKids+' kid'+(localKids===1?'':'s')+' · '+localDays+' marked day'+(localDays===1?'':'s')+'</div>'+
+      '<b>In the shared space</b><div class="v" style="margin-bottom:0">'+sharedKids+' kid'+(sharedKids===1?'':'s')+' · '+sharedDays+' marked day'+(sharedDays===1?'':'s')+'</div></div>'+
+      '<p class="disc">Merging keeps every marked day from both sides. Kids and classes with the same name are treated as the same kid or class, so you won\'t get duplicates. Where a name, animal or colour disagree, the shared space wins.</p>'+
+      '<div class="actions col">'+
+        '<button class="btn primary" id="joinMerge">Merge both (recommended)</button>'+
+        '<button class="btn ghost" id="joinTake">Use shared copy, discard this phone\'s</button>'+
+        '<button class="btn ghost" id="joinCancel">Cancel</button>'+
+      '</div>';
+    overlay.classList.add("show");
+    function finish(newTree,push,msg){
+      syncCfg=cfg; saveSync(); rememberCode(cfg.code); queue=[]; saveQueue();
+      localTree=newTree; rebuildState(); saveLocal();
+      closeModal(); startPolling(); render();
+      var done=function(){ setStatus("synced"); beat(true).then(renderStatus); };
+      if(push){
+        apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+          .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+          .then(bumpRev)
+          .then(done,function(e){ setStatus(isDenied(e)?"denied":"offline"); });
+      } else done();
+      toast(msg);
+    }
+    document.getElementById("joinMerge").addEventListener("click",function(){
+      finish(mergeTrees(localTree,{meta:tree.meta,records:tree.records||{}}),true,"Merged and sharing ⭐");
+    });
+    document.getElementById("joinTake").addEventListener("click",function(){
+      finish({meta:tree.meta,records:tree.records||{}},false,"Joined shared space ⭐");
+    });
+    document.getElementById("joinCancel").addEventListener("click",function(){
+      closeModal(); setStatus(syncOn()?"synced":"local");
+    });
+  }
+  /* Space codes this phone has used before.
+     The database rules deliberately forbid listing /spaces, so the app cannot
+     discover that two spaces differ only by capitalisation — that would need
+     read access to the root, which is the one thing the rules exist to deny.
+     What it CAN do is remember the codes used here and catch the retype, which
+     is how the near-duplicate gets created in the first place. */
+  function knownCodes(){ var v=readJSON(K_CODES); return (v&&typeof v.length==="number")?v:[]; }
+  function rememberCode(code){
+    var list=knownCodes(), c=cleanCode(code);
+    if(!c) return;
+    if(list.indexOf(c)<0){ list.push(c); if(list.length>12) list=list.slice(-12);
+      try{ localStorage.setItem(K_CODES,JSON.stringify(list)); }catch(e){} }
+  }
+  function codeCaseClash(code){
+    var c=cleanCode(code), lc=c.toLowerCase(), hit=null;
+    knownCodes().forEach(function(k){ if(k!==c&&k.toLowerCase()===lc) hit=k; });
+    return hit;
+  }
+  function connect(url,code){
+    var clash=codeCaseClash(code);
+    if(clash){
+      confirmSheet({title:"That code looks like a near-miss",danger:true,confirmLabel:"Use it anyway",
+        desc:"This phone has used \u201C"+clash+"\u201D before, which differs from what you typed only in capitalisation. "+
+             "Space codes are case-sensitive, so these are two completely separate spaces \u2014 joining the wrong one looks "+
+             "like your data has vanished. Check the other phone\u2019s Space ID before continuing.",
+        onConfirm:function(){ doConnect(url,code); }});
+      return;
+    }
+    doConnect(url,code);
+  }
+  function doConnect(url,code){
+    var cfg={dbUrl:url,code:code};
+    setStatus("syncing");
+    apiGet("",cfg).then(function(tree){
+      if(!treeHasKids(tree)){
+        /* This branch used to fire silently and report "shared space created",
+           so a mistyped code produced a cheerful success message and an empty
+           app that believed it was synced. It now says what it is about to do. */
+        var localKids=Object.keys((localTree&&localTree.meta&&localTree.meta.kids)||{}).length;
+        setStatus(syncOn()?"synced":"local");
+        confirmSheet({title:"Nothing is stored at that code",confirmLabel:"Create it",
+          desc:"No kids were found there, so this would start a brand-new empty space and put "+
+               (localKids?("this phone\u2019s "+localKids+" kid"+(localKids===1?"":"s")+" into it."):"nothing into it.")+
+               " If you expected to join the other phone, close this and check the address and the code \u2014 the code is case-sensitive.",
+          onConfirm:function(){
+            setStatus("syncing");
+            apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)},cfg)
+              .then(function(){ return apiSend({method:"PUT",path:"records",body:(localTree&&localTree.records)||{}},cfg); })
+              .then(function(){ return apiSend({method:"PUT",path:"rev",body:{".sv":"timestamp"}},cfg); })
+              .then(function(){
+                syncCfg=cfg; saveSync(); rememberCode(cfg.code); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render();
+                lastRev=null; lastFull=0;
+                beat(true).then(renderStatus);
+                toast("Sync on — new empty space created");
+              },function(e){ setStatus(isDenied(e)?"denied":"offline"); toast("Couldn\u2019t create the space"); });
+          }});
+        return null;
+      } else {
+        remoteDevices=(tree&&tree.devices)||{};
+        closeModal(); joinSheet(cfg,tree);
+      }
+    }).catch(function(e){
+      var res=document.getElementById("syncResult");
+      if(res){
+        res.className="result bad";
+        if(isWrongRegion(e)) res.innerHTML="\u2717 That address is for a different region. Your database is at:<div class=\"rules\">"+escapeHtml(e.correctUrl)+"</div>Paste that above and try again.";
+        else res.textContent="\u2717 Couldn't connect: "+e.message+". Use Test connection to check the details.";
+      }
+      setStatus(syncOn()?"synced":"local");
+    });
+  }
+
+  /* ================= BACKUP / RESTORE ================= */
+  var BACKUP_NAG_DAYS=45;
+  function lastBackup(){ try{ var v=localStorage.getItem(K_BAK); return v?JSON.parse(v).ts:0; }catch(e){ return 0; } }
+  function noteBackup(){ try{ localStorage.setItem(K_BAK,JSON.stringify({ts:Date.now()})); }catch(e){} renderBackupNote(); }
+  /* Phones get lost, wiped and replaced, and browsers can evict site storage.
+     A cloud copy in one Firebase space is not a backup. So show how old the last
+     backup is, and nudge (never nag modally) once it goes stale. */
+  function renderBackupNote(){
+    var el=document.getElementById("backupNote"); if(!el) return;
+    if(!treeHasKids(localTree)){ el.className="backup-note"; el.textContent=""; return; }
+    var ts=lastBackup();
+    if(!ts){ el.className="backup-note due"; el.textContent="You haven\u2019t backed up yet. One tap on Back up saves a copy you can restore onto any phone."; return; }
+    var days=Math.floor((Date.now()-ts)/86400000);
+    if(days>=BACKUP_NAG_DAYS){ el.className="backup-note due"; el.textContent="Last backup was "+days+" days ago \u2014 worth doing another one."; }
+    else { el.className="backup-note"; el.textContent="Last backup: "+(days<1?"today":days===1?"yesterday":days+" days ago")+"."; }
+  }
+  document.getElementById("exportBtn").addEventListener("click",function(){
+    var out={kids:state.kids}; // export as readable state
+    var blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"}), url=URL.createObjectURL(blob), a=document.createElement("a");
+    a.href=url; a.download="attendance-backup-"+todayISO()+".json"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); },1000); noteBackup(); toast("Backup downloaded");
+  });
+  document.getElementById("importBtn").addEventListener("click",function(){ document.getElementById("importFile").click(); });
+  document.getElementById("importFile").addEventListener("change",function(e){
+    var file=e.target.files[0]; if(!file) return; var reader=new FileReader();
+    reader.onload=function(){
+      var data; try{ data=JSON.parse(reader.result); }catch(err){ toast("That file isn't a valid backup"); return; }
+      var kids = Array.isArray(data.kids)?data.kids : (Array.isArray(data.classes)?[{id:kidId(),name:data.name||"My kid",emoji:"🌟",color:PALETTE[0].c,soft:PALETTE[0].soft,classes:data.classes}] : null);
+      if(!kids){ toast("That file isn't a valid backup"); return; }
+      confirmSheet({title:"Restore this backup?",desc:"It has "+kids.length+" kid"+(kids.length===1?"":"s")+". This replaces everything currently "+(syncOn()?"in the shared space":"on this phone")+".",confirmLabel:"Restore",
+        onConfirm:function(){
+          localTree=stateToTree({kids:kids}); rebuildState(); saveLocal(); render();
+          if(syncOn()){ queue=[]; saveQueue();
+            apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
+              .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+              .then(bumpRev)
+              .then(function(){ setStatus("synced"); beat(true); },function(e){ setStatus(isDenied(e)?"denied":"offline"); }); }
+          toast("Backup restored");
+        }});
+    };
+    reader.readAsText(file); e.target.value="";
+  });
+
+  /* ================= STORAGE DURABILITY =================
+     This request used to be fire-and-forget. persist() returns a boolean saying
+     whether it was actually GRANTED, and browsers usually refuse for an ordinary
+     visited page — granting it on engagement heuristics, or when the site has
+     been installed to the home screen. A refusal means the browser may clear
+     this app's data whenever the device is short of space, which is exactly how
+     a phone full of records comes back empty. The owner is now told. */
+  var storageState="unknown";
+  function renderStorageNote(){
+    var el=document.getElementById("storageNote"); if(!el) return;
+    if(storageState==="persistent"){
+      el.className="backup-note";
+      el.textContent="Storage: protected \u2014 this browser has agreed not to clear this app\u2019s data.";
+    } else if(storageState==="evictable"){
+      el.className="backup-note due";
+      el.textContent="Storage: not protected \u2014 this browser may clear this app\u2019s data if the phone runs low on space. Add the app to your home screen to fix that, and keep a recent backup.";
+    } else { el.className="backup-note"; el.textContent=""; }
+  }
+  function checkStorage(){
+    var s=null;
+    try{ s=navigator.storage; }catch(e){ s=null; }
+    if(!s||!s.persist||!s.persisted){ storageState="unknown"; renderStorageNote(); return; }
+    try{
+      s.persisted().then(function(already){
+        if(already){ storageState="persistent"; renderStorageNote(); return null; }
+        return s.persist().then(function(granted){ storageState=granted?"persistent":"evictable"; renderStorageNote(); });
+      }).catch(function(){ storageState="unknown"; renderStorageNote(); });
+    }catch(e){ storageState="unknown"; renderStorageNote(); }
+  }
+  function renderUndoBtn(){
+    var el=document.getElementById("undoBtn"); if(!el) return;
+    var t=readTrash();
+    if(!t){ el.style.display="none"; return; }
+    var days=Math.floor((Date.now()-t.ts)/86400000);
+    var kids=Object.keys((t.tree&&t.tree.meta&&t.tree.meta.kids)||{}).length;
+    el.style.display="";
+    el.textContent="\u21A9 Undo the last replace ("+kids+" kid"+(kids===1?"":"s")+", "+countTreeDays(t.tree)+" days, "+(days<1?"today":days+"d ago")+")";
+  }
+  document.getElementById("undoBtn").addEventListener("click",function(){
+    var t=readTrash(); if(!t){ renderUndoBtn(); return; }
+    confirmSheet({title:"Put the old copy back?",confirmLabel:"Restore it",
+      desc:"This restores the copy saved just before this phone\u2019s data was replaced, and merges in anything marked since, so nothing is thrown away. It will also be shared to the other phone.",
+      onConfirm:function(){ undoLastReplace(); renderUndoBtn(); }});
+  });
+
+  /* ================= TOAST ================= */
+  var toastEl=document.getElementById("toast"), toastTimer;
+  function toast(m){ toastEl.textContent=m; toastEl.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.classList.remove("show"); },2000); }
+
+  /* ================= BOOT ================= */
+  (function(){ var v=document.getElementById("verText"); if(v) v.textContent=APP_VERSION+" (schema "+SCHEMA+")"; })();
+  loadLocal(); render(); renderBackupNote(); renderUndoBtn(); renderBanner();
+  checkStorage();
+  if(syncOn()){ setStatus("syncing"); startPolling(); beat(true); pull(true); }
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ stopPolling(); }
+    else if(syncOn()){ startPolling(); beat(true); pull(true); }
+  });
+  window.addEventListener("focus",function(){ pull(true); });
+  window.addEventListener("online",function(){ scheduleFlush(); beat(true); pull(true); });
+})();
 </script>
-<script type="module" src="app.js"></script>
 </body>
 </html>
