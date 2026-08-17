@@ -11,6 +11,7 @@ A kids' class-attendance tracker. A parent marks the days a child attended a cla
 The owner needs this app to **outlive any single tool or service**. It must keep working even if the AI that built it disappears. That constraint drove every choice below. Preserve it:
 
 - **It is a single, self-contained `index.html` file.** No build step, no framework, no bundler, no npm. Plain HTML + CSS + vanilla ES5-ish JavaScript in one file. Do not introduce a build pipeline or split it into modules unless the owner explicitly asks. Do not add external script/font/CDN dependencies — it must run offline from a local file.
+  - **The only sanctioned companion files are `manifest.webmanifest`, `sw.js`, `icon-192.png` and `icon-512.png`.** They exist solely so Chrome will *install* the app, which is the only way it grants persistent storage. `index.html` still works alone from a local file — those references simply 404 harmlessly. Do not remove them: without them the phone's copy is evictable, and Chrome deleted it twice in August 2026. `sw.js` must keep a fetch handler (installability depends on it) and must stay **network-first**; cache-first would pin the owner to a stale version and deploys would silently never arrive.
 - **Data lives on the device**, in `localStorage`, wrapped in try/catch so it degrades gracefully if storage is blocked.
 - **Sync is optional and uses the owner's own cloud**, not any first-party/AI service (see Sync).
 
@@ -147,7 +148,7 @@ printed at the bottom of the tools section so you can tell what a phone is runni
 
 `synccore.test.js` is a Node script (no dependencies) that duplicates the **exact** pure sync-core functions embedded in `index.html` and verifies two-device convergence: concurrent marks on different days, unmarking, add/delete kid & class, PATCH edits preserving nested classes, seeding an empty space, the blank-space guard, delete-all still propagating, space fingerprints, and merge behaviour.
 
-**If you change any of these functions in `index.html` — `deepGet/Set/Merge/Delete`, `applyRest`, `stateToTree`, `treeToState`, any `op*` builder, or `treeHasKids` / `spaceIsSeeded` / `metaForWrite` / `normName` / `mergeTrees` / `spaceFingerprint` — copy the identical change into `synccore.test.js` and run `node synccore.test.js`. All tests must pass (currently 60/60).** Keeping the two copies in sync is the safety net; do not let them drift.
+**If you change any of these functions in `index.html` — `deepGet/Set/Merge/Delete`, `applyRest`, `stateToTree`, `treeToState`, any `op*` builder, or `treeHasKids` / `spaceIsSeeded` / `metaForWrite` / `normName` / `mergeTrees` / `spaceFingerprint` / `adoptionLoss` / `lossNeedsConsent` — copy the identical change into `synccore.test.js` and run `node synccore.test.js`. All tests must pass (currently 78/78).** Keeping the two copies in sync is the safety net; do not let them drift.
 
 The last test enforces that automatically: it reads `index.html`, extracts the
 `PURE SYNC CORE` block from both files, and fails with a line-by-line diff if they
@@ -198,7 +199,11 @@ This has happened for real; work through it in this order.
 
 ## How to deploy
 
-Upload `index.html`, `README.md`, `synccore.test.js` to a GitHub repo. Optionally enable **Settings → Pages** (Deploy from branch → main → root) to serve the app at `https://<user>.github.io/<repo>/`, which also enables "Add to Home Screen" on phones.
+Upload `index.html`, `synccore.test.js`, `manifest.webmanifest`, `sw.js`, `icon-192.png`, `icon-512.png`, `README.md`, `CHANGELOG.md` and `HANDOFF.md` to a GitHub repo. Enable **Settings → Pages** (Deploy from branch → main → root) to serve the app at `https://<user>.github.io/<repo>/`.
+
+**On each phone, INSTALL the app — do not merely "Add to Home Screen".** In Chrome, ⋮ → *Install app* (newer Chrome shows *Install and create shortcut*, then choose **Install**). A home-screen *shortcut* is only a bookmark: it shares Chrome's ordinary evictable storage and gives no protection at all. Confirm a real install two ways: the app opens with **no address bar**, and the storage line at the bottom of the tools section reads **"Storage: protected"**. If it says *not protected*, the install did not take and the data remains deletable.
+
+When uploading, upload **only** the files intended. GitHub's "Add files via upload" adds alongside existing files and overwrites by name — dropping in another project's folder once clobbered `index.html` here (recovered from git history).
 
 ## History of changes (most recent last)
 
@@ -215,3 +220,16 @@ Upload `index.html`, `README.md`, `synccore.test.js` to a GitHub repo. Optionall
    downloads stay inside the free tier as records accumulate, background polling
    paused, blocked-access diagnosis, backup-age reminder, persistent-storage request,
    schema stamp, a visible app version, and self-correcting wrong-region addresses.
+7. Data-durability hardening: `persist()` is now *checked* rather than merely
+   requested and its answer reported in-app; a corrupt `localStorage` value can no
+   longer abort the load or overwrite the data it failed to parse; destructive sync
+   adoptions are held for confirmation with a 14-day on-device undo snapshot; stale
+   phone entries can be removed in-app; `connect()` no longer reports success when it
+   has quietly created a new empty space; space-code case collisions are caught
+   against codes previously used on the device.
+8. Installability: web app manifest, PNG icons and a minimal network-first service
+   worker so Chrome will *install* the app and grant persistent storage — the fix for
+   two separate wipes in August 2026. Sharing being off is now announced loudly
+   instead of shown as a grey pill (`att.eversynced.v3`), the turn-off confirmation
+   states that the phone becomes the only copy, and a saveable recovery link
+   (`#j=` fragment) restores lost sync settings in one tap.
