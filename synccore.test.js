@@ -7,7 +7,7 @@ function deepDelete(tree,path){ var s=path.split('/'),n=tree; for(var i=0;i<s.le
 function applyRest(tree,op){ tree=tree||{}; if(op.method==='PUT'){ return op.path?deepSet(tree,op.path,op.body):op.body; } if(op.method==='PATCH'){ return deepMerge(tree,op.path,op.body); } if(op.method==='DELETE'){ return deepDelete(tree,op.path); } return tree; }
 
 function stateToTree(state){
-  var tree={meta:{kids:{}},records:{},cancelled:{}};
+  var tree={meta:{kids:{}},records:{},cancelled:{},cleared:{}};
   (state.kids||[]).forEach(function(k,ki){
     var kn={name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:ki,classes:{}};
     (k.classes||[]).forEach(function(c,ci){
@@ -22,13 +22,21 @@ function stateToTree(state){
       var cans=c.cancelled||{},chas=false,cout={};
       for(var cd in cans){ if(cans[cd]){ cout[cd]=true; chas=true; } }
       if(chas){ tree.cancelled[k.id]=tree.cancelled[k.id]||{}; tree.cancelled[k.id][c.id]=cout; }
+      /* Dues-cleared dates: a payment history, one leaf per date on which dues
+      were settled up to and including that day. The current billing cycle is
+      everything strictly AFTER the latest such date. Kept in its own branch for
+      the same reason as cancellations — it must never be mistakable for
+      attendance. */
+      var cls2=c.cleared||{},lhas=false,lout={};
+      for(var ld in cls2){ if(cls2[ld]){ lout[ld]=true; lhas=true; } }
+      if(lhas){ tree.cleared[k.id]=tree.cleared[k.id]||{}; tree.cleared[k.id][c.id]=lout; }
     });
     tree.meta.kids[k.id]=kn;
   });
   return tree;
 }
 function treeToState(tree,prevActiveId){
-  var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{}, canAll=(tree&&tree.cancelled)||{};
+  var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{}, canAll=(tree&&tree.cancelled)||{}, clrAll=(tree&&tree.cleared)||{};
   var kids=Object.keys(mk).map(function(id){
     var k=mk[id]||{}, classesObj=k.classes||{};
     var classes=Object.keys(classesObj).map(function(cid){
@@ -37,7 +45,9 @@ function treeToState(tree,prevActiveId){
       var cans=(canAll[id]&&canAll[id][cid])||{}, x={};
       /* Attendance wins if a day is somehow in both branches. */
       for(var cd in cans){ if(cans[cd]&&!r[cd]) x[cd]=true; }
-      return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r,cancelled:x};
+      var clrs=(clrAll[id]&&clrAll[id][cid])||{}, y={};
+      for(var ld in clrs){ if(clrs[ld]) y[ld]=true; }
+      return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r,cancelled:x,cleared:y};
     }).sort(function(a,b){return a.order-b.order;}).map(function(c){ delete c.order; return c; });
     return {id:id,name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:(k.order==null?0:k.order),classes:classes};
   }).sort(function(a,b){return a.order-b.order;}).map(function(k){ delete k.order; return k; });
@@ -47,15 +57,34 @@ function treeToState(tree,prevActiveId){
 function opMarkDay(kidId,classId,date,val){ return val
 ? [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'records/'+kidId+'/'+classId+'/'+date,body:true}]
 : [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date}]; }
+function opSetCleared(kidId,classId,date,val){ return [{method:val?'PUT':'DELETE',path:'cleared/'+kidId+'/'+classId+'/'+date,body:val?true:undefined}]; }
+/* Add one day to a YYYY-MM-DD string. Uses UTC arithmetic deliberately: this
+is pure calendar maths on a date string, so local time and DST must not be
+allowed anywhere near it. */
+function nextISO(iso){
+var p=String(iso||'').split('-');
+if(p.length!==3) return iso;
+var d=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));
+if(isNaN(d.getTime())) return iso;
+d.setUTCDate(d.getUTCDate()+1);
+return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2)+'-'+('0'+d.getUTCDate()).slice(-2);
+}
+/* First day of the current billing cycle for a class: the day after the most
+recent dues-cleared date. With no history, the cycle is all of time. */
+function cycleStart(clearedObj){
+var best=null;
+for(var d in (clearedObj||{})){ if(clearedObj[d]&&(best===null||d>best)) best=d; }
+return best===null?'0000-01-01':nextISO(best);
+}
 function opSetCancelled(kidId,classId,date,val){ return val
 ? [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'cancelled/'+kidId+'/'+classId+'/'+date,body:true}]
 : [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date}]; }
 function opAddKid(kid,order){ return [{method:'PUT',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft,order:order,classes:{}}}]; }
 function opEditKid(kid){ return [{method:'PATCH',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft}}]; }
-function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId},{method:'DELETE',path:'cancelled/'+kidId}]; }
+function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId},{method:'DELETE',path:'cancelled/'+kidId},{method:'DELETE',path:'cleared/'+kidId}]; }
 function opAddClass(kidId,cls,order){ return [{method:'PUT',path:'meta/kids/'+kidId+'/classes/'+cls.id,body:{name:cls.name,order:order}}]; }
 function opRenameClass(kidId,classId,name){ return [{method:'PATCH',path:'meta/kids/'+kidId+'/classes/'+classId,body:{name:name}}]; }
-function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId},{method:'DELETE',path:'cancelled/'+kidId+'/'+classId}]; }
+function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId},{method:'DELETE',path:'cancelled/'+kidId+'/'+classId},{method:'DELETE',path:'cleared/'+kidId+'/'+classId}]; }
 
 /* Does this tree actually hold roster data? Used to refuse to adopt an empty
    remote over a populated local tree (see pull()). A space that contains only
@@ -68,7 +97,7 @@ function treeHasKids(tree){
 
 /* Data-shape version stamped into every space, so a future version of this app
    can recognise and migrate an older space instead of guessing. */
-var SCHEMA=6;
+var SCHEMA=7;
 
 /* Firebase drops empty objects, so "every kid was deleted" and "this space was
    never set up" both arrive as a missing meta node. A scalar marker survives
@@ -93,7 +122,8 @@ function mergeTrees(base,incoming){
   if(!out.meta.kids||typeof out.meta.kids!=='object') out.meta.kids={};
   if(!out.records||typeof out.records!=='object') out.records={};
   if(!out.cancelled||typeof out.cancelled!=='object') out.cancelled={};
-  var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{}, bCan=(base&&base.cancelled)||{};
+  if(!out.cleared||typeof out.cleared!=='object') out.cleared={};
+  var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{}, bCan=(base&&base.cancelled)||{}, bClr=(base&&base.cleared)||{};
 
   var maxKidOrder=-1, kidByName={};
   Object.keys(out.meta.kids).forEach(function(id){
@@ -142,6 +172,13 @@ function mergeTrees(base,incoming){
         if(!out.cancelled[tid]) out.cancelled[tid]={};
         if(!out.cancelled[tid][tcid]) out.cancelled[tid][tcid]={};
         for(d in csrc){ if(csrc[d]) out.cancelled[tid][tcid][d]=true; }
+        }
+        var lsrc=(bClr[bid]&&bClr[bid][bcid])||{}, lany=false;
+        for(d in lsrc){ if(lsrc[d]){ lany=true; break; } }
+        if(lany){
+        if(!out.cleared[tid]) out.cleared[tid]={};
+        if(!out.cleared[tid][tcid]) out.cleared[tid][tcid]={};
+        for(d in lsrc){ if(lsrc[d]) out.cleared[tid][tcid][d]=true; }
       }
     });
   });
@@ -183,6 +220,17 @@ function spaceFingerprint(dbUrl,code){
       });
     });
     var lc=(local&&local.cancelled)||{}, rc=(remote&&remote.cancelled)||{};
+    var ll=(local&&local.cleared)||{}, rl=(remote&&remote.cleared)||{};
+    Object.keys(ll).forEach(function(kid){
+    var cls=ll[kid]||{};
+    Object.keys(cls).forEach(function(c){
+    var days=cls[c]||{};
+    Object.keys(days).forEach(function(d){
+    if(!days[d]) return;
+    if(!(rl[kid]&&rl[kid][c]&&rl[kid][c][d])) daysLost++;
+    });
+    });
+    });
     Object.keys(lc).forEach(function(kid){
     var cls=lc[kid]||{};
     Object.keys(cls).forEach(function(c){
@@ -225,10 +273,11 @@ Device.prototype.pull=function(){
       this.s.apply({method:"PUT",path:"meta",body:metaForWrite(this.local)});
       this.s.apply({method:"PUT",path:"records",body:this.local.records||{}});
       this.s.apply({method:"PUT",path:"cancelled",body:this.local.cancelled||{}});
+      this.s.apply({method:"PUT",path:"cleared",body:this.local.cleared||{}});
     }
     return;
   }
-  this.local={meta:(t.meta||{kids:{}}),records:(t.records||{}),cancelled:(t.cancelled||{})};
+  this.local={meta:(t.meta||{kids:{}}),records:(t.records||{}),cancelled:(t.cancelled||{}),cleared:(t.cleared||{})};
 };
 Device.prototype.state=function(){ return treeToState(this.local, this.active); };
 
@@ -573,6 +622,103 @@ ok(mg3.kids[0].classes[0].records["2026-05-05"]===true,"records merged across th
   var remote={meta:{kids:{k1:{name:"R",classes:{}}}},records:{},cancelled:{}};
   eq(adoptionLoss(local,remote).daysLost,6,"lost cancellations are counted as lost days");
   ok(lossNeedsConsent(adoptionLoss(local,remote)),"wiping cancellations still asks first");
+})();
+
+/* ===== DUES-CLEARED / BILLING CYCLES (v10) ===== */
+(function(){
+  /* nextISO: pure calendar arithmetic. Month, year and leap boundaries are where
+     a naive implementation silently produces the wrong cycle start. */
+  eq(nextISO("2026-08-17"),"2026-08-18","next day, mid-month");
+  eq(nextISO("2026-08-31"),"2026-09-01","next day across a month boundary");
+  eq(nextISO("2026-12-31"),"2027-01-01","next day across a year boundary");
+  eq(nextISO("2028-02-28"),"2028-02-29","leap year: Feb 28 -> Feb 29");
+  eq(nextISO("2028-02-29"),"2028-03-01","leap year: Feb 29 -> Mar 1");
+  eq(nextISO("2026-02-28"),"2026-03-01","non-leap year: Feb 28 -> Mar 1");
+  eq(nextISO("2026-04-30"),"2026-05-01","30-day month boundary");
+  eq(nextISO("rubbish"),"rubbish","malformed input is returned unchanged, not NaN");
+
+  /* cycleStart picks the LATEST cleared date and starts the day after */
+  eq(cycleStart({}),"0000-01-01","no history means the cycle is all of time");
+  eq(cycleStart({"2026-08-17":true}),"2026-08-18","cycle starts the day AFTER clearing");
+  eq(cycleStart({"2026-06-30":true,"2026-08-17":true,"2026-07-31":true}),"2026-08-18",
+     "with several entries the latest one wins, regardless of insertion order");
+  eq(cycleStart({"2026-08-17":false,"2026-06-30":true}),"2026-07-01",
+     "a falsy entry is ignored when finding the latest");
+  eq(cycleStart({"2026-12-31":true}),"2027-01-01","cycle start crosses the year correctly");
+})();
+
+/* the cleared branch syncs, survives merge, and is not confusable with attendance */
+(function(){
+  var srv=new Server(), A=new Device(srv,"A"), B=new Device(srv,"B");
+  A.local=stateToTree({kids:[{id:"k1",name:"R",emoji:"X",color:"#000",soft:"#eee",
+    classes:[{id:"c1",name:"Phonics",records:{}}]}],activeKidId:"k1"});
+  A.queue.push({method:"PUT",path:"",body:A.local}); A.flush(); B.pull();
+
+  A.applyOps(opMarkDay("k1","c1","2026-08-10",true));
+  A.applyOps(opSetCleared("k1","c1","2026-08-15",true));
+  A.flush(); B.pull();
+  eq(B.local.cleared.k1.c1["2026-08-15"],true,"a dues-cleared date syncs to the other phone");
+  eq(B.local.records.k1.c1["2026-08-10"],true,"attendance is untouched by clearing dues");
+  ok(!(B.local.records.k1.c1["2026-08-15"]),"clearing dues does NOT create an attendance record");
+
+  var cls=treeToState(B.local,null).kids[0].classes[0];
+  eq(cls.cleared["2026-08-15"],true,"treeToState surfaces the cleared date");
+  eq(cycleStart(cls.cleared),"2026-08-16","the new cycle begins the day after");
+
+  /* removing an entry reopens the cycle */
+  B.applyOps(opSetCleared("k1","c1","2026-08-15",false)); B.flush(); A.pull();
+  ok(!(A.local.cleared.k1&&A.local.cleared.k1.c1&&A.local.cleared.k1.c1["2026-08-15"]),
+     "removing an entry deletes it");
+  eq(cycleStart(treeToState(A.local,null).kids[0].classes[0].cleared),"0000-01-01",
+     "removing the only entry reopens the whole history");
+
+  /* two phones clearing different classes must not collide */
+  A.applyOps(opSetCleared("k1","c1","2026-09-01",true));
+  B.applyOps(opMarkDay("k1","c1","2026-09-05",true));
+  A.flush(); B.flush(); A.pull(); B.pull();
+  eq(JSON.stringify(A.local),JSON.stringify(B.local),"phones converge with mixed cleared/attendance ops");
+})();
+
+/* deletes must not orphan cleared dates; merge must union them */
+(function(){
+  var t={meta:{kids:{k1:{name:"R",classes:{c1:{name:"P",order:0},c2:{name:"F",order:1}}}}},
+         records:{},cancelled:{},
+         cleared:{k1:{c1:{"2026-08-01":true},c2:{"2026-08-02":true}}}};
+  var a=opDeleteClass("k1","c1").reduce(applyRest,t);
+  ok(!(a.cleared.k1&&a.cleared.k1.c1),"deleting a class removes its payment history");
+  eq(a.cleared.k1.c2["2026-08-02"],true,"the other class keeps its history");
+  var b=opDeleteKid("k1").reduce(applyRest,a);
+  ok(!(b.cleared&&b.cleared.k1),"deleting a kid removes all their payment history");
+
+  var mine={meta:{kids:{k1:{name:"R",classes:{c1:{name:"P",order:0}}}}},records:{},cancelled:{},
+            cleared:{k1:{c1:{"2026-07-31":true}}}};
+  var theirs={meta:{kids:{k1:{name:"R",classes:{c1:{name:"P",order:0}}}}},records:{},cancelled:{},
+              cleared:{k1:{c1:{"2026-08-31":true}}}};
+  var m=mergeTrees(mine,theirs);
+  eq(m.cleared.k1.c1["2026-07-31"],true,"merge keeps this phone's payment history");
+  eq(m.cleared.k1.c1["2026-08-31"],true,"merge keeps the other phone's payment history");
+  eq(cycleStart(m.cleared.k1.c1),"2026-09-01","after merging, the latest date defines the cycle");
+})();
+
+/* a wiped payment history must still trigger the confirmation */
+(function(){
+  var local={meta:{kids:{k1:{name:"R",classes:{}}}},records:{},cancelled:{},
+             cleared:{k1:{c1:{"1":true,"2":true,"3":true,"4":true,"5":true}}}};
+  var remote={meta:{kids:{k1:{name:"R",classes:{}}}},records:{},cancelled:{},cleared:{}};
+  eq(adoptionLoss(local,remote).daysLost,5,"lost payment history counts as lost days");
+  ok(lossNeedsConsent(adoptionLoss(local,remote)),"wiping payment history asks first");
+})();
+
+/* backup round trip must carry the payment history */
+(function(){
+  var tree={meta:{kids:{k1:{name:"R",emoji:"X",color:"#000",soft:"#eee",order:0,
+              classes:{c1:{name:"P",order:0}}}}},
+            records:{k1:{c1:{"2026-08-05":true}}},cancelled:{},
+            cleared:{k1:{c1:{"2026-08-06":true}}}};
+  var back=stateToTree(treeToState(tree,null));
+  eq(back.cleared.k1.c1["2026-08-06"],true,"payment history survives a state round trip");
+  var old=stateToTree({kids:[{id:"k1",name:"R",classes:[{id:"c1",name:"P",records:{"2026-01-01":true}}]}]});
+  eq(JSON.stringify(old.cleared),"{}","a pre-v10 backup restores with no payment history");
 })();
 
 console.log("\n"+pass+" passed, "+fail+" failed");

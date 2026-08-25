@@ -153,6 +153,15 @@
   .cancel-note{margin:-2px 0 10px;font-size:12px;font-weight:700;color:var(--ink-soft);}
   .mark-btn.cx{background:var(--line);color:var(--ink-soft);text-decoration:line-through;text-decoration-thickness:2px;}
   .cal-hint{margin:6px 2px 0;font-size:11px;color:var(--ink-soft);text-align:center;}
+  /* Dues-cleared is a marker, not a state: it must be able to sit on top of an
+     attended, cancelled or today cell without fighting any of them. A dot under
+     the number layers cleanly over all three. */
+  .cal-cell{position:relative;}
+  .cal-cell.paid::after{content:'';position:absolute;left:50%;transform:translateX(-50%);bottom:3px;width:5px;height:5px;border-radius:50%;background:var(--accent);}
+  .cal-cell.present.paid::after{background:#fff;}
+  .cal-legend i.lg-paid{position:relative;}
+  .cal-legend i.lg-paid::after{content:'';position:absolute;left:50%;transform:translateX(-50%);bottom:1px;width:4px;height:4px;border-radius:50%;background:var(--accent);}
+  .cycle-note{margin:-2px 0 10px;font-size:12px;font-weight:700;color:var(--accent);}
   .cal-legend{display:flex;justify-content:center;gap:16px;font-size:11px;color:var(--ink-soft);font-weight:700;}
   .cal-legend i{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:-1px;margin-right:5px;}
 
@@ -241,10 +250,11 @@
   <div class="range" id="rangeWrap">
     <p class="rlabel">Count over</p>
     <div class="chips" id="chips">
+      <button class="chip" data-range="cycle" aria-pressed="true">This cycle</button>
       <button class="chip" data-range="month">This month</button>
       <button class="chip" data-range="30">Last 30 days</button>
       <button class="chip" data-range="year">This year</button>
-      <button class="chip" data-range="all" aria-pressed="true">All time</button>
+      <button class="chip" data-range="all">All time</button>
       <button class="chip" data-range="custom">Custom</button>
     </div>
     <div class="custom-dates" id="customDates">
@@ -288,7 +298,7 @@
   function applyRest(tree,op){ tree=tree||{}; if(op.method==='PUT'){ return op.path?deepSet(tree,op.path,op.body):op.body; } if(op.method==='PATCH'){ return deepMerge(tree,op.path,op.body); } if(op.method==='DELETE'){ return deepDelete(tree,op.path); } return tree; }
 
   function stateToTree(state){
-    var tree={meta:{kids:{}},records:{},cancelled:{}};
+    var tree={meta:{kids:{}},records:{},cancelled:{},cleared:{}};
     (state.kids||[]).forEach(function(k,ki){
       var kn={name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:ki,classes:{}};
       (k.classes||[]).forEach(function(c,ci){
@@ -303,13 +313,21 @@
         var cans=c.cancelled||{},chas=false,cout={};
         for(var cd in cans){ if(cans[cd]){ cout[cd]=true; chas=true; } }
         if(chas){ tree.cancelled[k.id]=tree.cancelled[k.id]||{}; tree.cancelled[k.id][c.id]=cout; }
+        /* Dues-cleared dates: a payment history, one leaf per date on which dues
+        were settled up to and including that day. The current billing cycle is
+        everything strictly AFTER the latest such date. Kept in its own branch for
+        the same reason as cancellations — it must never be mistakable for
+        attendance. */
+        var cls2=c.cleared||{},lhas=false,lout={};
+        for(var ld in cls2){ if(cls2[ld]){ lout[ld]=true; lhas=true; } }
+        if(lhas){ tree.cleared[k.id]=tree.cleared[k.id]||{}; tree.cleared[k.id][c.id]=lout; }
       });
       tree.meta.kids[k.id]=kn;
     });
     return tree;
   }
   function treeToState(tree,prevActiveId){
-    var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{}, canAll=(tree&&tree.cancelled)||{};
+    var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{}, canAll=(tree&&tree.cancelled)||{}, clrAll=(tree&&tree.cleared)||{};
     var kids=Object.keys(mk).map(function(id){
       var k=mk[id]||{}, classesObj=k.classes||{};
       var classes=Object.keys(classesObj).map(function(cid){
@@ -318,7 +336,9 @@
         var cans=(canAll[id]&&canAll[id][cid])||{}, x={};
         /* Attendance wins if a day is somehow in both branches. */
         for(var cd in cans){ if(cans[cd]&&!r[cd]) x[cd]=true; }
-        return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r,cancelled:x};
+        var clrs=(clrAll[id]&&clrAll[id][cid])||{}, y={};
+        for(var ld in clrs){ if(clrs[ld]) y[ld]=true; }
+        return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r,cancelled:x,cleared:y};
       }).sort(function(a,b){return a.order-b.order;}).map(function(c){ delete c.order; return c; });
       return {id:id,name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:(k.order==null?0:k.order),classes:classes};
     }).sort(function(a,b){return a.order-b.order;}).map(function(k){ delete k.order; return k; });
@@ -328,15 +348,34 @@
   function opMarkDay(kidId,classId,date,val){ return val
   ? [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'records/'+kidId+'/'+classId+'/'+date,body:true}]
   : [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date}]; }
+  function opSetCleared(kidId,classId,date,val){ return [{method:val?'PUT':'DELETE',path:'cleared/'+kidId+'/'+classId+'/'+date,body:val?true:undefined}]; }
+  /* Add one day to a YYYY-MM-DD string. Uses UTC arithmetic deliberately: this
+  is pure calendar maths on a date string, so local time and DST must not be
+  allowed anywhere near it. */
+  function nextISO(iso){
+  var p=String(iso||'').split('-');
+  if(p.length!==3) return iso;
+  var d=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));
+  if(isNaN(d.getTime())) return iso;
+  d.setUTCDate(d.getUTCDate()+1);
+  return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2)+'-'+('0'+d.getUTCDate()).slice(-2);
+  }
+  /* First day of the current billing cycle for a class: the day after the most
+  recent dues-cleared date. With no history, the cycle is all of time. */
+  function cycleStart(clearedObj){
+  var best=null;
+  for(var d in (clearedObj||{})){ if(clearedObj[d]&&(best===null||d>best)) best=d; }
+  return best===null?'0000-01-01':nextISO(best);
+  }
   function opSetCancelled(kidId,classId,date,val){ return val
   ? [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'cancelled/'+kidId+'/'+classId+'/'+date,body:true}]
   : [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date}]; }
   function opAddKid(kid,order){ return [{method:'PUT',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft,order:order,classes:{}}}]; }
   function opEditKid(kid){ return [{method:'PATCH',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft}}]; }
-  function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId},{method:'DELETE',path:'cancelled/'+kidId}]; }
+  function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId},{method:'DELETE',path:'cancelled/'+kidId},{method:'DELETE',path:'cleared/'+kidId}]; }
   function opAddClass(kidId,cls,order){ return [{method:'PUT',path:'meta/kids/'+kidId+'/classes/'+cls.id,body:{name:cls.name,order:order}}]; }
   function opRenameClass(kidId,classId,name){ return [{method:'PATCH',path:'meta/kids/'+kidId+'/classes/'+classId,body:{name:name}}]; }
-  function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId},{method:'DELETE',path:'cancelled/'+kidId+'/'+classId}]; }
+  function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId},{method:'DELETE',path:'cancelled/'+kidId+'/'+classId},{method:'DELETE',path:'cleared/'+kidId+'/'+classId}]; }
 
   /* Does this tree actually hold roster data? Used to refuse to adopt an empty
      remote over a populated local tree (see pull()). A space that contains only
@@ -349,7 +388,7 @@
 
   /* Data-shape version stamped into every space, so a future version of this app
      can recognise and migrate an older space instead of guessing. */
-  var SCHEMA=6;
+  var SCHEMA=7;
 
   /* Firebase drops empty objects, so "every kid was deleted" and "this space was
      never set up" both arrive as a missing meta node. A scalar marker survives
@@ -374,7 +413,8 @@
     if(!out.meta.kids||typeof out.meta.kids!=='object') out.meta.kids={};
     if(!out.records||typeof out.records!=='object') out.records={};
     if(!out.cancelled||typeof out.cancelled!=='object') out.cancelled={};
-    var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{}, bCan=(base&&base.cancelled)||{};
+    if(!out.cleared||typeof out.cleared!=='object') out.cleared={};
+    var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{}, bCan=(base&&base.cancelled)||{}, bClr=(base&&base.cleared)||{};
 
     var maxKidOrder=-1, kidByName={};
     Object.keys(out.meta.kids).forEach(function(id){
@@ -423,6 +463,13 @@
           if(!out.cancelled[tid]) out.cancelled[tid]={};
           if(!out.cancelled[tid][tcid]) out.cancelled[tid][tcid]={};
           for(d in csrc){ if(csrc[d]) out.cancelled[tid][tcid][d]=true; }
+          }
+          var lsrc=(bClr[bid]&&bClr[bid][bcid])||{}, lany=false;
+          for(d in lsrc){ if(lsrc[d]){ lany=true; break; } }
+          if(lany){
+          if(!out.cleared[tid]) out.cleared[tid]={};
+          if(!out.cleared[tid][tcid]) out.cleared[tid][tcid]={};
+          for(d in lsrc){ if(lsrc[d]) out.cleared[tid][tcid][d]=true; }
         }
       });
     });
@@ -464,6 +511,17 @@
       });
     });
     var lc=(local&&local.cancelled)||{}, rc=(remote&&remote.cancelled)||{};
+    var ll=(local&&local.cleared)||{}, rl=(remote&&remote.cleared)||{};
+    Object.keys(ll).forEach(function(kid){
+    var cls=ll[kid]||{};
+    Object.keys(cls).forEach(function(c){
+    var days=cls[c]||{};
+    Object.keys(days).forEach(function(d){
+    if(!days[d]) return;
+    if(!(rl[kid]&&rl[kid][c]&&rl[kid][c][d])) daysLost++;
+    });
+    });
+    });
     Object.keys(lc).forEach(function(kid){
     var cls=lc[kid]||{};
     Object.keys(cls).forEach(function(c){
@@ -484,7 +542,7 @@
   }
 
   /* ================= CONSTANTS ================= */
-  var APP_VERSION="v9";
+  var APP_VERSION="v10";
   var PALETTE=[
     {name:"Grape",c:"#7A5CF0",soft:"#EEE9FE"},{name:"Berry",c:"#E85D9A",soft:"#FCE7F1"},
     {name:"Tangerine",c:"#F58A3C",soft:"#FDECDD"},{name:"Grass",c:"#3BAF5A",soft:"#E4F6EA"},
@@ -503,7 +561,7 @@
   var state={kids:[],activeKidId:null};
   var ui={activeKidId:null};
   var markDate=todayISO();
-  var range={mode:"all",from:null,to:null};
+  var range={mode:"cycle",from:null,to:null};
   var openCals={};
 
   function saveLocal(){ try{ localStorage.setItem(K_TREE,JSON.stringify(localTree)); localStorage.setItem(K_UI,JSON.stringify(ui)); }catch(e){} }
@@ -791,6 +849,7 @@
       apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
         .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
           .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cleared",body:localTree.cleared||{}}); })
         .then(bumpRev)
         .then(function(){ lastRev=null; lastFull=0; setStatus("synced"); toast("Old copy restored and shared"); },
               function(e){ setStatus(isDenied(e)?"denied":"offline"); toast("Restored on this phone; will share when online"); });
@@ -906,11 +965,12 @@
             return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
               .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
           .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cleared",body:localTree.cleared||{}}); })
               .then(bumpRev);
           }
           return;
         }
-        var incoming={meta:tree.meta||{kids:{}},records:tree.records||{},cancelled:tree.cancelled||{}};
+        var incoming={meta:tree.meta||{kids:{}},records:tree.records||{},cancelled:tree.cancelled||{},cleared:tree.cleared||{}};
         /* An empty-but-seeded space is a deliberate deletion and used to be
            adopted silently, which means one accidental delete — or one wrong
            space code — wiped every phone within 4 seconds with no undo. A
@@ -957,10 +1017,18 @@
     if(range.mode==="year")   return {from:toISO(new Date(y,0,1)),to:toISO(new Date(y,11,31)),label:"this year"};
     if(range.mode==="30")     return {from:shiftDay(todayISO(),-29),to:todayISO(),label:"last 30 days"};
     if(range.mode==="custom") return {from:range.from||"0000-01-01",to:range.to||"9999-12-31",label:"your dates"};
+    if(range.mode==="cycle") return {mode:"cycle",from:"0000-01-01",to:todayISO(),label:"this cycle"};
     return {from:"0000-01-01",to:"9999-12-31",label:"all time"};
   }
-  function countInRange(cls,r){ var n=0; for(var k in cls.records){ if(cls.records[k]&&k>=r.from&&k<=r.to) n++; } return n; }
-  function countCancelled(cls,r){ var n=0,c=cls.cancelled||{}; for(var k in c){ if(c[k]&&k>=r.from&&k<=r.to) n++; } return n; }
+  /* The billing cycle is per class, but the range selector is global. In cycle
+     mode each card therefore resolves its OWN start date — the day after that
+     class's latest dues-cleared date — while sharing one selector. */
+  function effRange(cls,r){
+    if(r.mode!=="cycle") return r;
+    return {from:cycleStart(cls.cleared||{}),to:todayISO(),label:"this cycle",mode:"cycle"};
+  }
+  function countInRange(cls,r){ r=effRange(cls,r); var n=0; for(var k in cls.records){ if(cls.records[k]&&k>=r.from&&k<=r.to) n++; } return n; }
+  function countCancelled(cls,r){ r=effRange(cls,r); var n=0,c=cls.cancelled||{}; for(var k in c){ if(c[k]&&k>=r.from&&k<=r.to) n++; } return n; }
   function countAll(cls){ var n=0; for(var k in cls.records){ if(cls.records[k]) n++; } return n; }
 
   function firstOfMonthISO(iso){ return iso.slice(0,7)+"-01"; }
@@ -982,9 +1050,10 @@
       var iso=year+"-"+("0"+(month+1)).slice(-2)+"-"+("0"+d).slice(-2);
       var present=!!cls.records[iso],inRange=iso>=r.from&&iso<=r.to;
       var cancelled=!present&&!!(cls.cancelled&&cls.cancelled[iso]);
-      var cl="cal-cell"+(present?" present":"")+(cancelled?" cancelled":"")+(inRange?"":" out")+(iso===todayI?" today":"");
+      var paid=!!(cls.cleared&&cls.cleared[iso]);
+      var cl="cal-cell"+(present?" present":"")+(cancelled?" cancelled":"")+(paid?" paid":"")+(inRange?"":" out")+(iso===todayI?" today":"");
       var style=present?' style="background:'+kid.color+'"':'';
-      var lbl=present?' aria-label="'+iso+' attended"':(cancelled?' aria-label="'+iso+' class cancelled"':'');
+      var lbl=present?' aria-label="'+iso+' attended"':(cancelled?' aria-label="'+iso+' class cancelled"':(paid?' aria-label="'+iso+' dues cleared"':''));
       cells+='<button class="'+cl+'" data-date="'+iso+'"'+style+lbl+'>'+d+'</button>';
     }
     return '<div class="cal-month"><div class="cal-title">'+MONTHS[month]+' '+year+'</div>'+
@@ -992,11 +1061,15 @@
       '<div class="cal-grid">'+cells+'</div></div>';
   }
   function calendarHTML(cls,r,kid){
+    r=effRange(cls,r);
     var w=calendarWindow(cls,r),sd=fromISO(w.start),ed=fromISO(w.end);
     var months=[],y=sd.getFullYear(),m=sd.getMonth(),ey=ed.getFullYear(),em=ed.getMonth();
     while(y<ey||(y===ey&&m<=em)){ months.push([y,m]); m++; if(m>11){m=0;y++;} if(months.length>72) break; }
     var truncated=false; if(months.length>36){ months=months.slice(months.length-36); truncated=true; }
-    var html='<div class="cal-legend"><span><i style="background:'+kid.color+'"></i>Attended</span><span><i style="box-shadow:inset 0 0 0 2px var(--accent);background:var(--bg)"></i>Today</span></div>';
+    var html='<div class="cal-legend"><span><i style="background:'+kid.color+'"></i>Attended</span>'+
+      '<span><i style="background:var(--line)"></i>Cancelled</span>'+
+      '<span><i class="lg-paid" style="background:var(--bg)"></i>Dues cleared</span>'+
+      '<span><i style="box-shadow:inset 0 0 0 2px var(--accent);background:var(--bg)"></i>Today</span></div>';
     if(truncated) html+='<div class="cal-note">Showing the most recent 36 months.</div>';
     months.forEach(function(ym){ html+=monthGridHTML(ym[0],ym[1],cls,r,kid); });
     return html;
@@ -1051,11 +1124,13 @@
     kid.classes.forEach(function(cls){
       var inRange=countInRange(cls,r),all=countAll(cls),present=!!cls.records[markDate];
       var cancelledN=countCancelled(cls,r),wasCancelled=!!(cls.cancelled&&cls.cancelled[markDate]);
+      var cycleFrom=cycleStart(cls.cleared||{});
       var card=document.createElement("div"); card.className="card";
       card.innerHTML=
         '<div class="card-top"><div class="cname"></div><button class="menu-btn" aria-label="Options">⋯</button></div>'+
         '<div class="readout"><span class="bignum">'+inRange+'</span><span class="unit">day'+(inRange===1?'':'s')+' · '+r.label+'</span>'+
           '<span class="alltime">all time<b>'+all+'</b></span></div>'+
+        (r.mode==="cycle"&&cycleFrom!=="0000-01-01"?('<div class="cycle-note">Cycle started '+prettyDate(cycleFrom)+'</div>'):'')+
         (cancelledN?('<div class="cancel-note">'+cancelledN+' cancelled by the class in this period \u2014 not counted</div>'):'')+
         '<div class="stars">'+starsMarkup(inRange,kid.color)+'</div>'+
         '<button class="mark-btn'+(present?' on':'')+(wasCancelled?' cx':'')+'">'+
@@ -1236,15 +1311,65 @@
     promptSheet({title:"Add a class",desc:"What's it called?",placeholder:"e.g. Piano, Swimming, Math tuition",confirmLabel:"Add class",
       onConfirm:function(name){ applyOps(opAddClass(kid.id,{id:classId(),name:name},kid.classes.length)); render(); toast("Class added"); }}); });
   function openClassMenu(kid,cls){
-    sheet.innerHTML='<h3></h3><div class="actions col"><button class="btn ghost" id="mRename">Rename class</button><button class="btn warn" id="mDelete">Delete class</button><button class="btn ghost" id="mClose">Close</button></div>';
+    sheet.innerHTML='<h3></h3><div class="actions col">'+
+      '<button class="btn primary" id="mPaid">\u20B9 Dues cleared up to '+prettyDate(markDate)+'</button>'+
+      '<button class="btn ghost" id="mHistory">Payment history</button>'+
+      '<button class="btn ghost" id="mRename">Rename class</button><button class="btn warn" id="mDelete">Delete class</button><button class="btn ghost" id="mClose">Close</button></div>';
     sheet.querySelector("h3").textContent=cls.name; overlay.classList.add("show");
     document.getElementById("mClose").addEventListener("click",closeModal);
+    document.getElementById("mPaid").addEventListener("click",function(){
+      closeModal();
+      var already=!!(cls.cleared&&cls.cleared[markDate]);
+      if(already){ toast("Dues were already cleared up to that date"); return; }
+      var upto=countInRange(cls,{from:cycleStart(cls.cleared||{}),to:markDate,label:""});
+      confirmSheet({title:"Clear dues up to "+prettyDate(markDate)+"?",confirmLabel:"Mark cleared",
+        desc:"This closes the current cycle for "+cls.name+" at "+upto+" day"+(upto===1?"":"s")+
+             ". A new cycle starts the following day, and \u201CThis cycle\u201D will count from there. "+
+             "Nothing is deleted \u2014 every day stays in All time, and you can undo this from Payment history.",
+        onConfirm:function(){ applyOps(opSetCleared(kid.id,cls.id,markDate,true)); render(); toast("Dues cleared \u2014 new cycle started"); }});
+    });
+    document.getElementById("mHistory").addEventListener("click",function(){ closeModal(); openPaidHistory(kid,cls); });
     document.getElementById("mRename").addEventListener("click",function(){ closeModal();
       promptSheet({title:"Rename class",value:cls.name,confirmLabel:"Save name",onConfirm:function(n){ applyOps(opRenameClass(kid.id,cls.id,n)); render(); }}); });
     document.getElementById("mDelete").addEventListener("click",function(){ closeModal(); var total=countAll(cls);
       confirmSheet({title:'Delete "'+cls.name+'"?',danger:true,confirmLabel:"Delete",
         desc:"This removes the class and its "+total+" recorded day"+(total===1?"":"s")+". Can't be undone (except from a backup).",
         onConfirm:function(){ applyOps(opDeleteClass(kid.id,cls.id)); render(); toast("Class deleted"); }}); });
+  }
+
+  function openPaidHistory(kid,cls){
+    var dates=Object.keys(cls.cleared||{}).filter(function(d){ return cls.cleared[d]; }).sort().reverse();
+    var rows;
+    if(!dates.length){
+      rows='<p class="disc">No dues have been cleared for this class yet. Use \u201CDues cleared up to \u2026\u201D in the class menu; set the recording date first if you are back-dating it.</p>';
+    } else {
+      var prev=null, list=dates.slice().sort();   // oldest first, to show each cycle's span
+      var spans={};
+      list.forEach(function(d){
+        var from=prev===null?null:nextISO(prev);
+        spans[d]=countInRange(cls,{from:from||"0000-01-01",to:d,label:""});
+        prev=d;
+      });
+      rows=dates.map(function(d){
+        return '<div class="dev"><span>\u20B9 '+prettyDate(d)+'<em> \u00B7 '+spans[d]+' day'+(spans[d]===1?'':'s')+'</em></span>'+
+               '<b><button type="button" class="dev-x" data-date="'+d+'" title="Remove this entry">\u2715</button></b></div>';
+      }).join("");
+      rows='<div class="dev-list">'+rows+'</div><p class="disc">Each entry closed a cycle on that date. Removing one reopens that cycle \u2014 no attendance is affected.</p>';
+    }
+    sheet.innerHTML='<h3>Payment history</h3><p class="sub"></p>'+rows+
+      '<div class="actions col"><button class="btn ghost" id="phClose">Close</button></div>';
+    sheet.querySelector(".sub").textContent=cls.name;
+    overlay.classList.add("show");
+    document.getElementById("phClose").addEventListener("click",closeModal);
+    Array.prototype.forEach.call(sheet.querySelectorAll(".dev-x"),function(b){
+      b.addEventListener("click",function(){
+        var d=b.getAttribute("date")||b.getAttribute("data-date");
+        closeModal();
+        confirmSheet({title:"Remove "+prettyDate(d)+"?",danger:true,confirmLabel:"Remove",
+          desc:"This reopens that cycle, so \u201CThis cycle\u201D will count from further back. No attendance or cancellation is changed.",
+          onConfirm:function(){ applyOps(opSetCleared(kid.id,cls.id,d,false)); render(); toast("Entry removed"); }});
+      });
+    });
   }
 
   /* ================= SYNC UI ================= */
@@ -1430,16 +1555,17 @@
         apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
           .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
           .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cleared",body:localTree.cleared||{}}); })
           .then(bumpRev)
           .then(done,function(e){ setStatus(isDenied(e)?"denied":"offline"); });
       } else done();
       toast(msg);
     }
     document.getElementById("joinMerge").addEventListener("click",function(){
-      finish(mergeTrees(localTree,{meta:tree.meta,records:tree.records||{},cancelled:tree.cancelled||{}}),true,"Merged and sharing ⭐");
+      finish(mergeTrees(localTree,{meta:tree.meta,records:tree.records||{},cancelled:tree.cancelled||{},cleared:tree.cleared||{}}),true,"Merged and sharing ⭐");
     });
     document.getElementById("joinTake").addEventListener("click",function(){
-      finish({meta:tree.meta,records:tree.records||{},cancelled:tree.cancelled||{}},false,"Joined shared space ⭐");
+      finish({meta:tree.meta,records:tree.records||{},cancelled:tree.cancelled||{},cleared:tree.cleared||{}},false,"Joined shared space ⭐");
     });
     document.getElementById("joinCancel").addEventListener("click",function(){
       closeModal(); setStatus(syncOn()?"synced":"local");
@@ -1554,6 +1680,7 @@
             apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
               .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
           .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cleared",body:localTree.cleared||{}}); })
               .then(bumpRev)
               .then(function(){ setStatus("synced"); beat(true); },function(e){ setStatus(isDenied(e)?"denied":"offline"); }); }
           toast("Backup restored");

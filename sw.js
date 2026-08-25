@@ -13,7 +13,7 @@
    users to a stale version and a deploy silently never arrives. Here the
    network always wins when it is reachable, and the cache is only a fallback. */
 
-var CACHE = "attendance-v9";
+var CACHE = "attendance-v10";
 var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", function(e){
