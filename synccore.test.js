@@ -7,7 +7,7 @@ function deepDelete(tree,path){ var s=path.split('/'),n=tree; for(var i=0;i<s.le
 function applyRest(tree,op){ tree=tree||{}; if(op.method==='PUT'){ return op.path?deepSet(tree,op.path,op.body):op.body; } if(op.method==='PATCH'){ return deepMerge(tree,op.path,op.body); } if(op.method==='DELETE'){ return deepDelete(tree,op.path); } return tree; }
 
 function stateToTree(state){
-  var tree={meta:{kids:{}},records:{}};
+  var tree={meta:{kids:{}},records:{},cancelled:{}};
   (state.kids||[]).forEach(function(k,ki){
     var kn={name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:ki,classes:{}};
     (k.classes||[]).forEach(function(c,ci){
@@ -15,32 +15,47 @@ function stateToTree(state){
       var recs=c.records||{},has=false,out={};
       for(var d in recs){ if(recs[d]){ out[d]=true; has=true; } }
       if(has){ tree.records[k.id]=tree.records[k.id]||{}; tree.records[k.id][c.id]=out; }
+      /* Cancelled days live in their own branch, never mixed into records.
+      A cancelled class is not attendance and must never be countable as a
+      star; keeping them in separate trees makes that structurally impossible
+      rather than dependent on every counting site remembering to check. */
+      var cans=c.cancelled||{},chas=false,cout={};
+      for(var cd in cans){ if(cans[cd]){ cout[cd]=true; chas=true; } }
+      if(chas){ tree.cancelled[k.id]=tree.cancelled[k.id]||{}; tree.cancelled[k.id][c.id]=cout; }
     });
     tree.meta.kids[k.id]=kn;
   });
   return tree;
 }
 function treeToState(tree,prevActiveId){
-  var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{};
+  var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{}, canAll=(tree&&tree.cancelled)||{};
   var kids=Object.keys(mk).map(function(id){
     var k=mk[id]||{}, classesObj=k.classes||{};
     var classes=Object.keys(classesObj).map(function(cid){
       var c=classesObj[cid]||{}, recs=(recAll[id]&&recAll[id][cid])||{}, r={};
       for(var d in recs){ if(recs[d]) r[d]=true; }
-      return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r};
+      var cans=(canAll[id]&&canAll[id][cid])||{}, x={};
+      /* Attendance wins if a day is somehow in both branches. */
+      for(var cd in cans){ if(cans[cd]&&!r[cd]) x[cd]=true; }
+      return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r,cancelled:x};
     }).sort(function(a,b){return a.order-b.order;}).map(function(c){ delete c.order; return c; });
     return {id:id,name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:(k.order==null?0:k.order),classes:classes};
   }).sort(function(a,b){return a.order-b.order;}).map(function(k){ delete k.order; return k; });
   var activeKidId=(prevActiveId&&kids.some(function(k){return k.id===prevActiveId;}))?prevActiveId:(kids.length?kids[0].id:null);
   return {kids:kids,activeKidId:activeKidId};
 }
-function opMarkDay(kidId,classId,date,val){ return [{method:val?'PUT':'DELETE',path:'records/'+kidId+'/'+classId+'/'+date,body:val?true:undefined}]; }
+function opMarkDay(kidId,classId,date,val){ return val
+? [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'records/'+kidId+'/'+classId+'/'+date,body:true}]
+: [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date}]; }
+function opSetCancelled(kidId,classId,date,val){ return val
+? [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'cancelled/'+kidId+'/'+classId+'/'+date,body:true}]
+: [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date}]; }
 function opAddKid(kid,order){ return [{method:'PUT',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft,order:order,classes:{}}}]; }
 function opEditKid(kid){ return [{method:'PATCH',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft}}]; }
-function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId}]; }
+function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId},{method:'DELETE',path:'cancelled/'+kidId}]; }
 function opAddClass(kidId,cls,order){ return [{method:'PUT',path:'meta/kids/'+kidId+'/classes/'+cls.id,body:{name:cls.name,order:order}}]; }
 function opRenameClass(kidId,classId,name){ return [{method:'PATCH',path:'meta/kids/'+kidId+'/classes/'+classId,body:{name:name}}]; }
-function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId}]; }
+function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId},{method:'DELETE',path:'cancelled/'+kidId+'/'+classId}]; }
 
 /* Does this tree actually hold roster data? Used to refuse to adopt an empty
    remote over a populated local tree (see pull()). A space that contains only
@@ -53,7 +68,7 @@ function treeHasKids(tree){
 
 /* Data-shape version stamped into every space, so a future version of this app
    can recognise and migrate an older space instead of guessing. */
-var SCHEMA=5;
+var SCHEMA=6;
 
 /* Firebase drops empty objects, so "every kid was deleted" and "this space was
    never set up" both arrive as a missing meta node. A scalar marker survives
@@ -77,7 +92,8 @@ function mergeTrees(base,incoming){
   if(!out.meta||typeof out.meta!=='object') out.meta={};
   if(!out.meta.kids||typeof out.meta.kids!=='object') out.meta.kids={};
   if(!out.records||typeof out.records!=='object') out.records={};
-  var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{};
+  if(!out.cancelled||typeof out.cancelled!=='object') out.cancelled={};
+  var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{}, bCan=(base&&base.cancelled)||{};
 
   var maxKidOrder=-1, kidByName={};
   Object.keys(out.meta.kids).forEach(function(id){
@@ -119,6 +135,13 @@ function mergeTrees(base,incoming){
         if(!out.records[tid]) out.records[tid]={};
         if(!out.records[tid][tcid]) out.records[tid][tcid]={};
         for(d in src){ if(src[d]) out.records[tid][tcid][d]=true; }
+        }
+        var csrc=(bCan[bid]&&bCan[bid][bcid])||{}, cany=false;
+        for(d in csrc){ if(csrc[d]){ cany=true; break; } }
+        if(cany){
+        if(!out.cancelled[tid]) out.cancelled[tid]={};
+        if(!out.cancelled[tid][tcid]) out.cancelled[tid][tcid]={};
+        for(d in csrc){ if(csrc[d]) out.cancelled[tid][tcid][d]=true; }
       }
     });
   });
@@ -159,6 +182,17 @@ function spaceFingerprint(dbUrl,code){
         });
       });
     });
+    var lc=(local&&local.cancelled)||{}, rc=(remote&&remote.cancelled)||{};
+    Object.keys(lc).forEach(function(kid){
+    var cls=lc[kid]||{};
+    Object.keys(cls).forEach(function(c){
+    var days=cls[c]||{};
+    Object.keys(days).forEach(function(d){
+    if(!days[d]) return;
+    if(!(rc[kid]&&rc[kid][c]&&rc[kid][c][d])) daysLost++;
+    });
+    });
+    });
     return {kidsLost:kidsLost,daysLost:daysLost};
   }
   /* A single day unmarked on the other phone must NOT prompt, or the prompt
@@ -190,10 +224,11 @@ Device.prototype.pull=function(){
     if(treeHasKids(this.local)){
       this.s.apply({method:"PUT",path:"meta",body:metaForWrite(this.local)});
       this.s.apply({method:"PUT",path:"records",body:this.local.records||{}});
+      this.s.apply({method:"PUT",path:"cancelled",body:this.local.cancelled||{}});
     }
     return;
   }
-  this.local={meta:(t.meta||{kids:{}}),records:(t.records||{})};
+  this.local={meta:(t.meta||{kids:{}}),records:(t.records||{}),cancelled:(t.cancelled||{})};
 };
 Device.prototype.state=function(){ return treeToState(this.local, this.active); };
 
@@ -437,6 +472,107 @@ ok(mg3.kids[0].classes[0].records["2026-05-05"]===true,"records merged across th
   ok(!lossNeedsConsent(null),"a null loss does not prompt");
   /* falsy leaves are absences, not marks */
   eq(adoptionLoss(T(K,{k1:{c1:{"2026-07-01":false}}}),T(K,{})),{kidsLost:0,daysLost:0},"an unmarked leaf is not a loss");
+})();
+
+/* ===== CANCELLED CLASSES (v9) =====
+   The hard requirement: a cancelled class must NEVER be countable as attendance.
+   These tests exist to make that structural, not a matter of remembering to
+   check a flag at each counting site. */
+(function(){
+  var srvX=new Server();
+  var A=new Device(srvX,"A"), B=new Device(srvX,"B");
+  A.local=stateToTree({kids:[{id:"k1",name:"Ruhaan",emoji:"X",color:"#000",soft:"#eee",
+    classes:[{id:"c1",name:"Phonics",records:{}}]}],activeKidId:"k1"});
+  A.queue.push({method:"PUT",path:"",body:A.local}); A.flush(); B.pull();
+
+  /* cancelling on one phone reaches the other and stays out of records */
+  A.applyOps(opSetCancelled("k1","c1","2026-08-20",true)); A.flush(); B.pull();
+  eq(B.local.cancelled.k1.c1["2026-08-20"],true,"a cancellation syncs to the other phone");
+  ok(!(B.local.records.k1&&B.local.records.k1.c1&&B.local.records.k1.c1["2026-08-20"]),
+     "a cancelled day never appears in records");
+
+  /* the state the UI counts from separates them */
+  var st=treeToState(B.local,null), cls=st.kids[0].classes[0];
+  ok(!cls.records["2026-08-20"],"treeToState keeps a cancelled day out of records");
+  eq(cls.cancelled["2026-08-20"],true,"treeToState surfaces the cancelled day");
+
+  /* marking attended must clear the cancellation, not sit alongside it */
+  B.applyOps(opMarkDay("k1","c1","2026-08-20",true)); B.flush(); A.pull();
+  eq(A.local.records.k1.c1["2026-08-20"],true,"marking attended sets the record");
+  ok(!(A.local.cancelled.k1&&A.local.cancelled.k1.c1&&A.local.cancelled.k1.c1["2026-08-20"]),
+     "marking attended CLEARS the cancellation (never both)");
+
+  /* and the reverse direction */
+  A.applyOps(opSetCancelled("k1","c1","2026-08-20",true)); A.flush(); B.pull();
+  ok(!(B.local.records.k1&&B.local.records.k1.c1&&B.local.records.k1.c1["2026-08-20"]),
+     "cancelling CLEARS an existing attendance mark");
+  eq(B.local.cancelled.k1.c1["2026-08-20"],true,"cancelling wins after clearing attendance");
+
+  /* even if a malformed tree has both, attendance must win in the derived state */
+  var both={meta:{kids:{k1:{name:"R",classes:{c1:{name:"P",order:0}}}}},
+            records:{k1:{c1:{"2026-08-21":true}}},cancelled:{k1:{c1:{"2026-08-21":true}}}};
+  var c2=treeToState(both,null).kids[0].classes[0];
+  eq(c2.records["2026-08-21"],true,"a day in both branches counts as attended");
+  ok(!c2.cancelled["2026-08-21"],"a day in both branches is not also shown cancelled");
+
+  /* removing a cancellation */
+  B.applyOps(opSetCancelled("k1","c1","2026-08-20",false)); B.flush(); A.pull();
+  ok(!(A.local.cancelled.k1&&A.local.cancelled.k1.c1&&A.local.cancelled.k1.c1["2026-08-20"]),
+     "un-cancelling removes the day");
+
+  /* concurrent, different days, one attended one cancelled — both survive */
+  A.applyOps(opMarkDay("k1","c1","2026-09-01",true));
+  B.applyOps(opSetCancelled("k1","c1","2026-09-02",true));
+  A.flush(); B.flush(); A.pull(); B.pull();
+  eq(A.local.records.k1.c1["2026-09-01"],true,"concurrent attendance survives");
+  eq(A.local.cancelled.k1.c1["2026-09-02"],true,"concurrent cancellation survives");
+  eq(JSON.stringify(A.local),JSON.stringify(B.local),"both phones converge with mixed marks");
+})();
+
+/* deleting a class or kid must not orphan their cancellations */
+(function(){
+  var t={meta:{kids:{k1:{name:"R",classes:{c1:{name:"P",order:0},c2:{name:"F",order:1}}}}},
+         records:{k1:{c1:{"2026-08-01":true},c2:{"2026-08-02":true}}},
+         cancelled:{k1:{c1:{"2026-08-03":true},c2:{"2026-08-04":true}}}};
+  var after=opDeleteClass("k1","c1").reduce(applyRest,t);
+  ok(!(after.cancelled.k1&&after.cancelled.k1.c1),"deleting a class removes its cancellations");
+  eq(after.cancelled.k1.c2["2026-08-04"],true,"the other class keeps its cancellations");
+  var gone=opDeleteKid("k1").reduce(applyRest,after);
+  ok(!(gone.cancelled&&gone.cancelled.k1),"deleting a kid removes all their cancellations");
+})();
+
+/* backup round-trip: cancellations must survive stateToTree/treeToState */
+(function(){
+  var tree={meta:{kids:{k1:{name:"R",emoji:"X",color:"#000",soft:"#eee",order:0,
+              classes:{c1:{name:"P",order:0}}}}},
+            records:{k1:{c1:{"2026-08-05":true}}},
+            cancelled:{k1:{c1:{"2026-08-06":true}}}};
+  var back=stateToTree(treeToState(tree,null));
+  eq(back.records.k1.c1["2026-08-05"],true,"attendance survives a state round trip");
+  eq(back.cancelled.k1.c1["2026-08-06"],true,"cancellations survive a state round trip");
+  /* an OLD backup with no cancelled branch must not throw */
+  var old=stateToTree({kids:[{id:"k1",name:"R",classes:[{id:"c1",name:"P",records:{"2026-01-01":true}}]}]});
+  eq(JSON.stringify(old.cancelled),"{}","a pre-v9 backup restores with no cancellations");
+})();
+
+/* merge must union cancellations, not drop one side */
+(function(){
+  var mine={meta:{kids:{k1:{name:"Ruhaan",classes:{c1:{name:"Phonics",order:0}}}}},
+            records:{},cancelled:{k1:{c1:{"2026-08-10":true}}}};
+  var theirs={meta:{kids:{k1:{name:"Ruhaan",classes:{c1:{name:"Phonics",order:0}}}}},
+              records:{},cancelled:{k1:{c1:{"2026-08-11":true}}}};
+  var m=mergeTrees(mine,theirs);
+  eq(m.cancelled.k1.c1["2026-08-10"],true,"merge keeps this phone's cancellations");
+  eq(m.cancelled.k1.c1["2026-08-11"],true,"merge keeps the other phone's cancellations");
+})();
+
+/* losing cancellations counts as data loss, so a wipe still prompts */
+(function(){
+  var local={meta:{kids:{k1:{name:"R",classes:{}}}},records:{},
+             cancelled:{k1:{c1:{"1":true,"2":true,"3":true,"4":true,"5":true,"6":true}}}};
+  var remote={meta:{kids:{k1:{name:"R",classes:{}}}},records:{},cancelled:{}};
+  eq(adoptionLoss(local,remote).daysLost,6,"lost cancellations are counted as lost days");
+  ok(lossNeedsConsent(adoptionLoss(local,remote)),"wiping cancellations still asks first");
 })();
 
 console.log("\n"+pass+" passed, "+fail+" failed");

@@ -146,6 +146,13 @@
   .cal-cell.out{opacity:.32;}
   .cal-cell.today{box-shadow:inset 0 0 0 2px var(--accent);}
   .cal-cell.present{color:#fff;}
+  /* Cancelled days are deliberately NOT another bright colour: the kid's colour
+     means attendance throughout the app, and a second saturated hue would read as
+     a competing kind of success. Grey, struck through, clearly 'nothing happened'. */
+  .cal-cell.cancelled{background:var(--line);color:var(--ink-soft);text-decoration:line-through;text-decoration-thickness:2px;}
+  .cancel-note{margin:-2px 0 10px;font-size:12px;font-weight:700;color:var(--ink-soft);}
+  .mark-btn.cx{background:var(--line);color:var(--ink-soft);text-decoration:line-through;text-decoration-thickness:2px;}
+  .cal-hint{margin:6px 2px 0;font-size:11px;color:var(--ink-soft);text-align:center;}
   .cal-legend{display:flex;justify-content:center;gap:16px;font-size:11px;color:var(--ink-soft);font-weight:700;}
   .cal-legend i{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:-1px;margin-right:5px;}
 
@@ -281,7 +288,7 @@
   function applyRest(tree,op){ tree=tree||{}; if(op.method==='PUT'){ return op.path?deepSet(tree,op.path,op.body):op.body; } if(op.method==='PATCH'){ return deepMerge(tree,op.path,op.body); } if(op.method==='DELETE'){ return deepDelete(tree,op.path); } return tree; }
 
   function stateToTree(state){
-    var tree={meta:{kids:{}},records:{}};
+    var tree={meta:{kids:{}},records:{},cancelled:{}};
     (state.kids||[]).forEach(function(k,ki){
       var kn={name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:ki,classes:{}};
       (k.classes||[]).forEach(function(c,ci){
@@ -289,32 +296,47 @@
         var recs=c.records||{},has=false,out={};
         for(var d in recs){ if(recs[d]){ out[d]=true; has=true; } }
         if(has){ tree.records[k.id]=tree.records[k.id]||{}; tree.records[k.id][c.id]=out; }
+        /* Cancelled days live in their own branch, never mixed into records.
+        A cancelled class is not attendance and must never be countable as a
+        star; keeping them in separate trees makes that structurally impossible
+        rather than dependent on every counting site remembering to check. */
+        var cans=c.cancelled||{},chas=false,cout={};
+        for(var cd in cans){ if(cans[cd]){ cout[cd]=true; chas=true; } }
+        if(chas){ tree.cancelled[k.id]=tree.cancelled[k.id]||{}; tree.cancelled[k.id][c.id]=cout; }
       });
       tree.meta.kids[k.id]=kn;
     });
     return tree;
   }
   function treeToState(tree,prevActiveId){
-    var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{};
+    var mk=(tree&&tree.meta&&tree.meta.kids)||{}, recAll=(tree&&tree.records)||{}, canAll=(tree&&tree.cancelled)||{};
     var kids=Object.keys(mk).map(function(id){
       var k=mk[id]||{}, classesObj=k.classes||{};
       var classes=Object.keys(classesObj).map(function(cid){
         var c=classesObj[cid]||{}, recs=(recAll[id]&&recAll[id][cid])||{}, r={};
         for(var d in recs){ if(recs[d]) r[d]=true; }
-        return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r};
+        var cans=(canAll[id]&&canAll[id][cid])||{}, x={};
+        /* Attendance wins if a day is somehow in both branches. */
+        for(var cd in cans){ if(cans[cd]&&!r[cd]) x[cd]=true; }
+        return {id:cid,name:c.name,order:(c.order==null?0:c.order),records:r,cancelled:x};
       }).sort(function(a,b){return a.order-b.order;}).map(function(c){ delete c.order; return c; });
       return {id:id,name:k.name,emoji:k.emoji,color:k.color,soft:k.soft,order:(k.order==null?0:k.order),classes:classes};
     }).sort(function(a,b){return a.order-b.order;}).map(function(k){ delete k.order; return k; });
     var activeKidId=(prevActiveId&&kids.some(function(k){return k.id===prevActiveId;}))?prevActiveId:(kids.length?kids[0].id:null);
     return {kids:kids,activeKidId:activeKidId};
   }
-  function opMarkDay(kidId,classId,date,val){ return [{method:val?'PUT':'DELETE',path:'records/'+kidId+'/'+classId+'/'+date,body:val?true:undefined}]; }
+  function opMarkDay(kidId,classId,date,val){ return val
+  ? [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'records/'+kidId+'/'+classId+'/'+date,body:true}]
+  : [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date}]; }
+  function opSetCancelled(kidId,classId,date,val){ return val
+  ? [{method:'DELETE',path:'records/'+kidId+'/'+classId+'/'+date},{method:'PUT',path:'cancelled/'+kidId+'/'+classId+'/'+date,body:true}]
+  : [{method:'DELETE',path:'cancelled/'+kidId+'/'+classId+'/'+date}]; }
   function opAddKid(kid,order){ return [{method:'PUT',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft,order:order,classes:{}}}]; }
   function opEditKid(kid){ return [{method:'PATCH',path:'meta/kids/'+kid.id,body:{name:kid.name,emoji:kid.emoji,color:kid.color,soft:kid.soft}}]; }
-  function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId}]; }
+  function opDeleteKid(kidId){ return [{method:'DELETE',path:'meta/kids/'+kidId},{method:'DELETE',path:'records/'+kidId},{method:'DELETE',path:'cancelled/'+kidId}]; }
   function opAddClass(kidId,cls,order){ return [{method:'PUT',path:'meta/kids/'+kidId+'/classes/'+cls.id,body:{name:cls.name,order:order}}]; }
   function opRenameClass(kidId,classId,name){ return [{method:'PATCH',path:'meta/kids/'+kidId+'/classes/'+classId,body:{name:name}}]; }
-  function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId}]; }
+  function opDeleteClass(kidId,classId){ return [{method:'DELETE',path:'meta/kids/'+kidId+'/classes/'+classId},{method:'DELETE',path:'records/'+kidId+'/'+classId},{method:'DELETE',path:'cancelled/'+kidId+'/'+classId}]; }
 
   /* Does this tree actually hold roster data? Used to refuse to adopt an empty
      remote over a populated local tree (see pull()). A space that contains only
@@ -327,7 +349,7 @@
 
   /* Data-shape version stamped into every space, so a future version of this app
      can recognise and migrate an older space instead of guessing. */
-  var SCHEMA=5;
+  var SCHEMA=6;
 
   /* Firebase drops empty objects, so "every kid was deleted" and "this space was
      never set up" both arrive as a missing meta node. A scalar marker survives
@@ -351,7 +373,8 @@
     if(!out.meta||typeof out.meta!=='object') out.meta={};
     if(!out.meta.kids||typeof out.meta.kids!=='object') out.meta.kids={};
     if(!out.records||typeof out.records!=='object') out.records={};
-    var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{};
+    if(!out.cancelled||typeof out.cancelled!=='object') out.cancelled={};
+    var bKids=(base&&base.meta&&base.meta.kids)||{}, bRec=(base&&base.records)||{}, bCan=(base&&base.cancelled)||{};
 
     var maxKidOrder=-1, kidByName={};
     Object.keys(out.meta.kids).forEach(function(id){
@@ -393,6 +416,13 @@
           if(!out.records[tid]) out.records[tid]={};
           if(!out.records[tid][tcid]) out.records[tid][tcid]={};
           for(d in src){ if(src[d]) out.records[tid][tcid][d]=true; }
+          }
+          var csrc=(bCan[bid]&&bCan[bid][bcid])||{}, cany=false;
+          for(d in csrc){ if(csrc[d]){ cany=true; break; } }
+          if(cany){
+          if(!out.cancelled[tid]) out.cancelled[tid]={};
+          if(!out.cancelled[tid][tcid]) out.cancelled[tid][tcid]={};
+          for(d in csrc){ if(csrc[d]) out.cancelled[tid][tcid][d]=true; }
         }
       });
     });
@@ -433,6 +463,17 @@
         });
       });
     });
+    var lc=(local&&local.cancelled)||{}, rc=(remote&&remote.cancelled)||{};
+    Object.keys(lc).forEach(function(kid){
+    var cls=lc[kid]||{};
+    Object.keys(cls).forEach(function(c){
+    var days=cls[c]||{};
+    Object.keys(days).forEach(function(d){
+    if(!days[d]) return;
+    if(!(rc[kid]&&rc[kid][c]&&rc[kid][c][d])) daysLost++;
+    });
+    });
+    });
     return {kidsLost:kidsLost,daysLost:daysLost};
   }
   /* A single day unmarked on the other phone must NOT prompt, or the prompt
@@ -443,7 +484,7 @@
   }
 
   /* ================= CONSTANTS ================= */
-  var APP_VERSION="v8";
+  var APP_VERSION="v9";
   var PALETTE=[
     {name:"Grape",c:"#7A5CF0",soft:"#EEE9FE"},{name:"Berry",c:"#E85D9A",soft:"#FCE7F1"},
     {name:"Tangerine",c:"#F58A3C",soft:"#FDECDD"},{name:"Grass",c:"#3BAF5A",soft:"#E4F6EA"},
@@ -749,6 +790,7 @@
       setStatus("syncing");
       apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
         .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
         .then(bumpRev)
         .then(function(){ lastRev=null; lastFull=0; setStatus("synced"); toast("Old copy restored and shared"); },
               function(e){ setStatus(isDenied(e)?"denied":"offline"); toast("Restored on this phone; will share when online"); });
@@ -863,11 +905,12 @@
           if(treeHasKids(localTree)){
             return apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
               .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
               .then(bumpRev);
           }
           return;
         }
-        var incoming={meta:tree.meta||{kids:{}},records:tree.records||{}};
+        var incoming={meta:tree.meta||{kids:{}},records:tree.records||{},cancelled:tree.cancelled||{}};
         /* An empty-but-seeded space is a deliberate deletion and used to be
            adopted silently, which means one accidental delete — or one wrong
            space code — wiped every phone within 4 seconds with no undo. A
@@ -917,6 +960,7 @@
     return {from:"0000-01-01",to:"9999-12-31",label:"all time"};
   }
   function countInRange(cls,r){ var n=0; for(var k in cls.records){ if(cls.records[k]&&k>=r.from&&k<=r.to) n++; } return n; }
+  function countCancelled(cls,r){ var n=0,c=cls.cancelled||{}; for(var k in c){ if(c[k]&&k>=r.from&&k<=r.to) n++; } return n; }
   function countAll(cls){ var n=0; for(var k in cls.records){ if(cls.records[k]) n++; } return n; }
 
   function firstOfMonthISO(iso){ return iso.slice(0,7)+"-01"; }
@@ -937,9 +981,11 @@
     for(var d=1;d<=dim;d++){
       var iso=year+"-"+("0"+(month+1)).slice(-2)+"-"+("0"+d).slice(-2);
       var present=!!cls.records[iso],inRange=iso>=r.from&&iso<=r.to;
-      var cl="cal-cell"+(present?" present":"")+(inRange?"":" out")+(iso===todayI?" today":"");
+      var cancelled=!present&&!!(cls.cancelled&&cls.cancelled[iso]);
+      var cl="cal-cell"+(present?" present":"")+(cancelled?" cancelled":"")+(inRange?"":" out")+(iso===todayI?" today":"");
       var style=present?' style="background:'+kid.color+'"':'';
-      cells+='<button class="'+cl+'" data-date="'+iso+'"'+style+'>'+d+'</button>';
+      var lbl=present?' aria-label="'+iso+' attended"':(cancelled?' aria-label="'+iso+' class cancelled"':'');
+      cells+='<button class="'+cl+'" data-date="'+iso+'"'+style+lbl+'>'+d+'</button>';
     }
     return '<div class="cal-month"><div class="cal-title">'+MONTHS[month]+' '+year+'</div>'+
       '<div class="cal-dow"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>'+
@@ -1004,34 +1050,95 @@
     cardsEl.innerHTML="";
     kid.classes.forEach(function(cls){
       var inRange=countInRange(cls,r),all=countAll(cls),present=!!cls.records[markDate];
+      var cancelledN=countCancelled(cls,r),wasCancelled=!!(cls.cancelled&&cls.cancelled[markDate]);
       var card=document.createElement("div"); card.className="card";
       card.innerHTML=
         '<div class="card-top"><div class="cname"></div><button class="menu-btn" aria-label="Options">⋯</button></div>'+
         '<div class="readout"><span class="bignum">'+inRange+'</span><span class="unit">day'+(inRange===1?'':'s')+' · '+r.label+'</span>'+
           '<span class="alltime">all time<b>'+all+'</b></span></div>'+
+        (cancelledN?('<div class="cancel-note">'+cancelledN+' cancelled by the class in this period \u2014 not counted</div>'):'')+
         '<div class="stars">'+starsMarkup(inRange,kid.color)+'</div>'+
-        '<button class="mark-btn'+(present?' on':'')+'">'+
-          (present?'<span class="tick">✓</span> Present '+(isToday?'today':'this day'):'Mark present '+(isToday?'today':'this day'))+'</button>'+
+        '<button class="mark-btn'+(present?' on':'')+(wasCancelled?' cx':'')+'">'+
+          (present?'<span class="tick">✓</span> Present '+(isToday?'today':'this day')
+                 :(wasCancelled?'Class cancelled '+(isToday?'today':'this day')
+                               :'Mark present '+(isToday?'today':'this day')))+'</button>'+
         '<div class="cal-toggle-row"><button class="cal-toggle">'+(openCals[cls.id]?'▲ Hide calendar':'📅 Show calendar')+'</button></div>'+
-        (openCals[cls.id]?('<div class="cal">'+calendarHTML(cls,r,kid)+'</div>'):'');
+        (openCals[cls.id]?('<div class="cal">'+calendarHTML(cls,r,kid)+'</div>'+
+          '<p class="cal-hint">Tap a day to mark it present \u00B7 press and hold to mark the class cancelled</p>'):'');
       card.querySelector(".cname").textContent=cls.name;
       var btn=card.querySelector(".mark-btn");
-      btn.addEventListener("click",function(){
-        var turningOn=!cls.records[markDate];
-        applyOps(opMarkDay(kid.id,cls.id,markDate,turningOn));
-        if(turningOn) celebrate(btn,kid.color);
-        render();
-      });
+      (function(){
+        /* Same gesture as the calendar: tap = present, long-press = cancelled. */
+        var t=null, longed=false;
+        function down(){ longed=false; t=setTimeout(function(){
+          longed=true; t=null;
+          var on=!(cls.cancelled&&cls.cancelled[markDate]);
+          applyOps(opSetCancelled(kid.id,cls.id,markDate,on));
+          if(navigator.vibrate){ try{ navigator.vibrate(18); }catch(e){} }
+          render();
+          toast(on?"Marked cancelled — not counted":"Cancellation removed");
+        },500); }
+        function up(){ if(t){ clearTimeout(t); t=null; } }
+        btn.addEventListener("touchstart",down,{passive:true});
+        btn.addEventListener("touchend",up);
+        btn.addEventListener("touchmove",up,{passive:true});
+        btn.addEventListener("touchcancel",up);
+        btn.addEventListener("mousedown",down);
+        btn.addEventListener("mouseup",up);
+        btn.addEventListener("mouseleave",up);
+        btn.addEventListener("contextmenu",function(e){ e.preventDefault(); });
+        btn.addEventListener("click",function(){
+          up();
+          if(longed){ longed=false; return; }
+          var turningOn=!cls.records[markDate];
+          applyOps(opMarkDay(kid.id,cls.id,markDate,turningOn));
+          if(turningOn) celebrate(btn,kid.color);
+          render();
+        });
+      })();
       card.querySelector(".menu-btn").addEventListener("click",function(){ openClassMenu(kid,cls); });
       card.querySelector(".cal-toggle").addEventListener("click",function(){ if(openCals[cls.id]) delete openCals[cls.id]; else openCals[cls.id]=true; render(); });
       var calEl=card.querySelector(".cal");
-      if(calEl){ calEl.addEventListener("click",function(e){
-        var c=e.target.closest(".cal-cell"); if(!c) return; var d=c.getAttribute("data-date"); if(!d) return;
-        var turningOn=!cls.records[d];
-        applyOps(opMarkDay(kid.id,cls.id,d,turningOn));
-        if(turningOn) celebrate(c,kid.color);
-        render();
-      }); }
+      if(calEl){
+        /* Tap marks attendance; LONG-PRESS marks the class as cancelled by the
+           school. The two are mutually exclusive and the op builders enforce it,
+           so a day can never be both. longPressed suppresses the click that
+           browsers fire after a long press, otherwise the release would
+           immediately toggle attendance back on. */
+        var pressTimer=null, longPressed=false;
+        function startPress(e){
+          var c=e.target.closest(".cal-cell");
+          if(!c||c.classList.contains("blank")) return;
+          var d=c.getAttribute("data-date"); if(!d) return;
+          longPressed=false;
+          pressTimer=setTimeout(function(){
+            longPressed=true; pressTimer=null;
+            var turningOn=!(cls.cancelled&&cls.cancelled[d]);
+            applyOps(opSetCancelled(kid.id,cls.id,d,turningOn));
+            if(navigator.vibrate){ try{ navigator.vibrate(18); }catch(e2){} }
+            render();
+            toast(turningOn?"Marked cancelled — not counted":"Cancellation removed");
+          },500);
+        }
+        function cancelPress(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } }
+        calEl.addEventListener("touchstart",startPress,{passive:true});
+        calEl.addEventListener("touchend",cancelPress);
+        calEl.addEventListener("touchmove",cancelPress,{passive:true});
+        calEl.addEventListener("touchcancel",cancelPress);
+        calEl.addEventListener("mousedown",startPress);
+        calEl.addEventListener("mouseup",cancelPress);
+        calEl.addEventListener("mouseleave",cancelPress);
+        calEl.addEventListener("contextmenu",function(e){ e.preventDefault(); });
+        calEl.addEventListener("click",function(e){
+          cancelPress();
+          if(longPressed){ longPressed=false; return; }
+          var c=e.target.closest(".cal-cell"); if(!c) return; var d=c.getAttribute("data-date"); if(!d) return;
+          var turningOn=!cls.records[d];
+          applyOps(opMarkDay(kid.id,cls.id,d,turningOn));
+          if(turningOn) celebrate(c,kid.color);
+          render();
+        });
+      }
       cardsEl.appendChild(card);
     });
   }
@@ -1322,16 +1429,17 @@
       if(push){
         apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
           .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
           .then(bumpRev)
           .then(done,function(e){ setStatus(isDenied(e)?"denied":"offline"); });
       } else done();
       toast(msg);
     }
     document.getElementById("joinMerge").addEventListener("click",function(){
-      finish(mergeTrees(localTree,{meta:tree.meta,records:tree.records||{}}),true,"Merged and sharing ⭐");
+      finish(mergeTrees(localTree,{meta:tree.meta,records:tree.records||{},cancelled:tree.cancelled||{}}),true,"Merged and sharing ⭐");
     });
     document.getElementById("joinTake").addEventListener("click",function(){
-      finish({meta:tree.meta,records:tree.records||{}},false,"Joined shared space ⭐");
+      finish({meta:tree.meta,records:tree.records||{},cancelled:tree.cancelled||{}},false,"Joined shared space ⭐");
     });
     document.getElementById("joinCancel").addEventListener("click",function(){
       closeModal(); setStatus(syncOn()?"synced":"local");
@@ -1426,7 +1534,7 @@
     else { el.className="backup-note"; el.textContent="Last backup: "+(days<1?"today":days===1?"yesterday":days+" days ago")+"."; }
   }
   function doBackup(){
-    var out={kids:state.kids}; // export as readable state
+    var out={kids:state.kids,schema:SCHEMA}; // readable state; kids carry .cancelled per class
     var blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"}), url=URL.createObjectURL(blob), a=document.createElement("a");
     a.href=url; a.download="attendance-backup-"+todayISO()+".json"; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(url); },1000); noteBackup(); toast("Backup downloaded");
@@ -1445,6 +1553,7 @@
           if(syncOn()){ queue=[]; saveQueue();
             apiSend({method:"PUT",path:"meta",body:metaForWrite(localTree)})
               .then(function(){ return apiSend({method:"PUT",path:"records",body:localTree.records||{}}); })
+          .then(function(){ return apiSend({method:"PUT",path:"cancelled",body:localTree.cancelled||{}}); })
               .then(bumpRev)
               .then(function(){ setStatus("synced"); beat(true); },function(e){ setStatus(isDenied(e)?"denied":"offline"); }); }
           toast("Backup restored");
