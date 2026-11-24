@@ -2,6 +2,26 @@
 
 All notable changes to this project are recorded here. Newest at the top.
 
+## v11 — A 4-digit family code brings a cleared phone back (Nov 24, 2026)
+- **Why:** on Nov 24, 2026 the owner cleared Chrome's browsing data. That wiped the
+  phone's copy *and* the saved database address and space code, so the app came back
+  empty. The data was safe in Firebase the whole time (last change Oct 29), but nobody
+  remembers the address and space code. The owner asked for a 4-digit code instead.
+- **How:** `family-code.gs`, a small Google Apps Script web app in the owner's Google
+  account (project "Kids Attendance family code"), stores the address, the space code
+  and a salted hash of the 4-digit code in Script Properties — never in this repo.
+  `KEY_URL` in index.html points at it; that URL is not a secret.
+- A phone with no kids and no sharing opens on **"Welcome back"**: enter the code →
+  the usual join/merge flow. "Start fresh instead" skips it; the empty state also has
+  an "I have a family code" button.
+- A connected phone with no code set shows a **"Set a 4-digit family code"** banner
+  (lowest priority); the sharing sheet has **Set or change family code**. Sending the
+  current space code is the proof a phone may set it.
+- **Guess cap** (the only thing making 4 digits safe): every 5 wrong codes in a row →
+  15-minute wait; 10 → refused until a connected phone sets the code again, or
+  `resetLock()` is run in the script editor. `forgetAll()` clears everything.
+- The recovery link (`#j=`) still works and is still the fallback.
+
 ## v8 — Installable, so the data stops disappearing
 - **The app is now installable, and that is the whole point.** Chrome only grants
   *persistent* storage — storage it will not delete when the phone runs low on space —

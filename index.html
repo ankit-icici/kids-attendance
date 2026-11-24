@@ -200,6 +200,7 @@
   .btn.ghost{background:var(--bg);color:var(--ink);border:2px solid var(--line-strong);}
   .btn.warn{background:var(--danger);color:#fff;}
   .btn.col{flex-direction:column;}
+  .sheet input.pin-in{width:100%;font:inherit;font-size:30px;font-weight:800;letter-spacing:.5em;text-align:center;padding:12px 0 12px .5em;border:2px solid var(--line-strong);border-radius:14px;background:#fff;color:var(--ink);margin-bottom:16px;}
   .result{font-size:13px;font-weight:700;padding:12px 14px;border-radius:12px;margin-bottom:14px;line-height:1.45;display:none;}
   .result.ok{display:block;background:var(--green-soft);color:var(--green-deep);}
   .result.bad{display:block;background:#FDE6E5;color:#B23B30;}
@@ -542,7 +543,11 @@
   }
 
   /* ================= CONSTANTS ================= */
-  var APP_VERSION="v10";
+  var APP_VERSION="v11";
+  /* Family code keeper (family-code.gs, a Google Apps Script web app). Not a
+     secret: it only hands out the sharing details for the right 4-digit code,
+     and caps wrong guesses. */
+  var KEY_URL="https://script.google.com/macros/s/AKfycbzT88E0ovEPpphvShuszqfT8NIyST3_RTu4F4v14ZTYwT79kMZF3HzpuJl0XBuU_Q4HMw/exec";
   var PALETTE=[
     {name:"Grape",c:"#7A5CF0",soft:"#EEE9FE"},{name:"Berry",c:"#E85D9A",soft:"#FCE7F1"},
     {name:"Tangerine",c:"#F58A3C",soft:"#FDECDD"},{name:"Grass",c:"#3BAF5A",soft:"#E4F6EA"},
@@ -832,6 +837,12 @@
         'The usual cause is Firebase <b>test mode rules expiring</b> — they lapse 30 days after setup.</p>'+
         '<button class="btn ghost" id="bannerFix">Show me how to fix it</button>';
       document.getElementById("bannerFix").addEventListener("click",openRulesSheet);
+    } else if(syncOn()&&famNeeded){
+      b.className="banner show";
+      b.innerHTML='<b>Set a 4-digit family code</b>'+
+        '<p>If this phone is ever cleared, the code brings all your data back in one step.</p>'+
+        '<button class="btn primary" id="bannerFam">Set family code</button>';
+      document.getElementById("bannerFam").addEventListener("click",openSetFamilyCodeSheet);
     } else { b.className="banner"; b.innerHTML=""; }
   }
   /* Put the pre-change copy back, and push it up so the other phone follows.
@@ -1109,7 +1120,10 @@
     document.getElementById("editKid").style.display=hasKid?"":"none";
     document.getElementById("hAva").textContent=hasKid?kid.emoji:"🙂";
     document.getElementById("kidName").textContent=hasKid?kid.name:"Add your first kid";
-    if(!hasKid){ cardsEl.innerHTML='<div class="empty-state"><span class="em">🧒</span><b>No kids yet</b>Tap the dashed circle above to add your first kid, give them a color and an animal, then start marking classes.</div>'; return; }
+    if(!hasKid){ cardsEl.innerHTML='<div class="empty-state"><span class="em">🧒</span><b>No kids yet</b>Tap the dashed circle above to add your first kid, give them a color and an animal, then start marking classes.'+
+      (syncOn()?'':'<button class="btn primary" id="emptyFam" style="margin-top:16px">I have a family code</button>')+'</div>';
+      var ef=document.getElementById("emptyFam"); if(ef) ef.addEventListener("click",openFamilyCodeSheet);
+      return; }
 
     var isToday=(markDate===todayISO());
     document.getElementById("markDateText").textContent=isToday?"Today":prettyDate(markDate).split(", ").slice(0,2).join(", ");
@@ -1411,7 +1425,7 @@
         '<div class="share-box"><b>Share these with the other phone</b><div class="v" id="shDb"></div><b>Space code</b><div class="v" id="shCode" style="margin-bottom:0"></div></div>'+
         '<p class="disc">On the other phone: open this same app, tap the status button up top, choose “Set up sharing”, and enter exactly these two values. The space code is <b>case-sensitive</b> — “Ruhaan” and “ruhaan” are two different spaces.</p>'+
         '<label class="fld">Name this phone (so you can tell them apart)</label><input type="text" id="devName" maxlength="24">'+
-        '<div class="actions col"><button class="btn ghost" id="rulesOpen">Make sync permanent (database rules)</button><button class="btn ghost" id="devSave">Save phone name</button><button class="btn ghost" id="syncCopy">Copy details to share</button><button class="btn ghost" id="syncLink">Copy recovery link (save this)</button><button class="btn warn" id="syncOff">Turn off sharing on this phone</button><button class="btn ghost" id="syncClose">Close</button></div>';
+        '<div class="actions col"><button class="btn primary" id="famSetOpen">Set or change family code</button><button class="btn ghost" id="rulesOpen">Make sync permanent (database rules)</button><button class="btn ghost" id="devSave">Save phone name</button><button class="btn ghost" id="syncCopy">Copy details to share</button><button class="btn ghost" id="syncLink">Copy recovery link (save this)</button><button class="btn warn" id="syncOff">Turn off sharing on this phone</button><button class="btn ghost" id="syncClose">Close</button></div>';
       overlay.classList.add("show");
       document.getElementById("shDb").textContent=cleanUrl(syncCfg.dbUrl);
       document.getElementById("shCode").textContent=cleanCode(syncCfg.code);
@@ -1451,6 +1465,7 @@
         });
       });
       document.getElementById("rulesOpen").addEventListener("click",function(){ closeModal(); openRulesSheet(); });
+      document.getElementById("famSetOpen").addEventListener("click",function(){ closeModal(); openSetFamilyCodeSheet(); });
       document.getElementById("syncCopy").addEventListener("click",function(){
         var txt="Attendance app sync\nDatabase URL: "+cleanUrl(syncCfg.dbUrl)+"\nSpace code: "+cleanCode(syncCfg.code);
         if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){ toast("Copied — send it to the other phone"); },function(){ toast("Couldn't copy; long-press to select"); }); }
@@ -1547,7 +1562,7 @@
       '</div>';
     overlay.classList.add("show");
     function finish(newTree,push,msg){
-      syncCfg=cfg; saveSync(); markEverSynced(); rememberCode(cfg.code); queue=[]; saveQueue();
+      syncCfg=cfg; saveSync(); markEverSynced(); rememberCode(cfg.code); setTimeout(checkFamilyCode,1500); queue=[]; saveQueue();
       localTree=newTree; rebuildState(); saveLocal();
       closeModal(); startPolling(); render();
       var done=function(){ setStatus("synced"); beat(true).then(renderStatus); };
@@ -1621,7 +1636,7 @@
               .then(function(){ return apiSend({method:"PUT",path:"records",body:(localTree&&localTree.records)||{}},cfg); })
               .then(function(){ return apiSend({method:"PUT",path:"rev",body:{".sv":"timestamp"}},cfg); })
               .then(function(){
-                syncCfg=cfg; saveSync(); markEverSynced(); rememberCode(cfg.code); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render();
+                syncCfg=cfg; saveSync(); markEverSynced(); rememberCode(cfg.code); setTimeout(checkFamilyCode,1500); queue=[]; saveQueue(); closeModal(); startPolling(); setStatus("synced"); render();
                 lastRev=null; lastFull=0;
                 beat(true).then(renderStatus);
                 toast("Sync on — new empty space created");
@@ -1779,6 +1794,103 @@
     return true;
   }
 
+
+  /* ================= FAMILY CODE ================= */
+  /* A cleared phone (Chrome "clear site data", a new phone) knows nothing:
+     not the data, not the database address, not the space code. Nobody
+     remembers those, so the owner asked for a 4-digit code instead. The code is
+     checked by family-code.gs, which stores the sharing details in the owner's
+     Google account and caps wrong guesses (5 wrong → 15-minute wait, 10 →
+     refused until a connected phone sets the code again). Neither the database
+     address nor the space code ever enters this file. */
+  var K_FAM="att.famcode.v1", famNeeded=false;
+  function keyCall(body){
+    return fetch(KEY_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body),redirect:"follow"})
+      .then(function(r){ return r.json(); });
+  }
+  function famMessage(j){
+    if(j.code==="WRONG") return "✗ Wrong code — "+j.left+" "+(j.left===1?"try":"tries")+" left before a 15-minute wait.";
+    if(j.code==="WAIT") return "✗ Too many wrong tries. Try again after "+new Date(j.until).toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"})+".";
+    if(j.code==="LOCKED") return "✗ Locked for safety after 10 wrong tries. Open the app on the other phone and set the family code again — that unlocks it.";
+    if(j.code==="NO_PIN") return "✗ No family code has been set yet. Use your recovery link, or the other phone, to reconnect.";
+    return "✗ "+(j.error||"Something went wrong");
+  }
+  function pinInput(id,label){
+    return '<label class="fld">'+label+'</label><input type="text" class="pin-in" id="'+id+'" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">';
+  }
+  function digitsOnly(el){ el.addEventListener("input",function(){ el.value=el.value.replace(/\D/g,"").slice(0,4); }); }
+  /* Empty phone: bring everything back with the family code. */
+  function openFamilyCodeSheet(){
+    sheet.innerHTML='<h3>Welcome back ⭐</h3>'+
+      '<p>Enter your 4-digit family code to bring your kids’ attendance back to this phone.</p>'+
+      pinInput("famPin","Family code")+
+      '<div class="result" id="famResult"></div>'+
+      '<div class="actions col"><button class="btn primary" id="famGo">Bring my data back</button>'+
+      '<button class="btn ghost" id="famLater">Start fresh instead</button></div>';
+    overlay.classList.add("show");
+    var inp=document.getElementById("famPin"), res=document.getElementById("famResult"), go=document.getElementById("famGo");
+    digitsOnly(inp); setTimeout(function(){ try{ inp.focus(); }catch(e){} },80);
+    function submit(){
+      var pin=inp.value;
+      if(!/^\d{4}$/.test(pin)){ res.className="result bad"; res.textContent="✗ Enter all 4 digits."; inp.focus(); return; }
+      go.disabled=true; go.textContent="Checking…"; res.className="result";
+      keyCall({action:"recover",pin:pin}).then(function(j){
+        if(j&&j.ok&&j.dbUrl&&j.code){
+          try{ localStorage.setItem(K_FAM,JSON.stringify({code:cleanCode(j.code)})); }catch(e){}
+          closeModal(); connect(cleanUrl(j.dbUrl),cleanCode(j.code));
+          return;
+        }
+        go.disabled=false; go.textContent="Bring my data back";
+        inp.value=""; res.className="result bad"; res.textContent=famMessage(j||{}); inp.focus();
+      },function(){
+        go.disabled=false; go.textContent="Bring my data back";
+        res.className="result bad"; res.textContent="✗ No internet. Connect and try again — this needs the internet once.";
+      });
+    }
+    go.addEventListener("click",submit);
+    inp.addEventListener("keydown",function(e){ if(e.key==="Enter") submit(); });
+    document.getElementById("famLater").addEventListener("click",closeModal);
+  }
+  /* Connected phone: choose (or change) the family code. Sending the current
+     space code is what proves this phone is allowed to. */
+  function openSetFamilyCodeSheet(){
+    if(!syncOn()){ toast("Turn sharing on first"); return; }
+    sheet.innerHTML='<h3>Set a family code</h3>'+
+      '<p>Pick 4 digits you’ll remember. If this phone or the other one is ever cleared, this code brings everything back. Both phones use the same code.</p>'+
+      pinInput("famNew","New family code")+pinInput("famNew2","Type it again")+
+      '<div class="result" id="famSetResult"></div>'+
+      '<div class="actions"><button class="btn ghost" id="famSetCancel">Cancel</button><button class="btn primary" id="famSetOk">Save code</button></div>';
+    overlay.classList.add("show");
+    var a=document.getElementById("famNew"), b=document.getElementById("famNew2"), res=document.getElementById("famSetResult"), ok=document.getElementById("famSetOk");
+    digitsOnly(a); digitsOnly(b); setTimeout(function(){ try{ a.focus(); }catch(e){} },80);
+    ok.addEventListener("click",function(){
+      if(!/^\d{4}$/.test(a.value)){ res.className="result bad"; res.textContent="✗ The code must be 4 digits."; a.focus(); return; }
+      if(a.value!==b.value){ res.className="result bad"; res.textContent="✗ The two codes don’t match."; b.value=""; b.focus(); return; }
+      ok.disabled=true; ok.textContent="Saving…";
+      keyCall({action:"setPin",pin:a.value,dbUrl:cleanUrl(syncCfg.dbUrl),code:cleanCode(syncCfg.code)}).then(function(j){
+        if(j&&j.ok){
+          try{ localStorage.setItem(K_FAM,JSON.stringify({code:cleanCode(syncCfg.code)})); }catch(e){}
+          famNeeded=false; renderBanner(); closeModal(); toast("Family code saved ⭐"); return;
+        }
+        ok.disabled=false; ok.textContent="Save code"; res.className="result bad"; res.textContent="✗ "+((j&&j.error)||"Couldn’t save");
+      },function(){ ok.disabled=false; ok.textContent="Save code"; res.className="result bad"; res.textContent="✗ No internet. Try again when connected."; });
+    });
+    document.getElementById("famSetCancel").addEventListener("click",closeModal);
+  }
+  /* Is a family code set for the space this phone is on? Asked once per open;
+     a phone that has set or used the code remembers, so it never nags. */
+  function checkFamilyCode(){
+    if(!syncOn()) return;
+    var f=readJSON(K_FAM);
+    if(f&&f.code===cleanCode(syncCfg.code)) return;
+    keyCall({action:"status",code:cleanCode(syncCfg.code)}).then(function(j){
+      if(!j||!j.ok) return;
+      if(j.pinSet){ try{ localStorage.setItem(K_FAM,JSON.stringify({code:cleanCode(syncCfg.code)})); }catch(e){} famNeeded=false; }
+      else famNeeded=true;
+      renderBanner();
+    },function(){});
+  }
+
   /* ================= TOAST ================= */
   var toastEl=document.getElementById("toast"), toastTimer;
   function toast(m){ toastEl.textContent=m; toastEl.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.classList.remove("show"); },2000); }
@@ -1786,7 +1898,8 @@
   /* ================= BOOT ================= */
   (function(){ var v=document.getElementById("verText"); if(v) v.textContent=APP_VERSION+" (schema "+SCHEMA+")"; })();
   loadLocal(); render(); renderBackupNote(); renderUndoBtn(); renderBanner();
-  tryRecoveryLink();
+  if(!tryRecoveryLink()&&!syncOn()&&!treeHasKids(localTree)) openFamilyCodeSheet();
+  checkFamilyCode();
   /* Register the service worker. Its real job is installability — Chrome will
      not offer to install without one, and being installed is what earns storage
      Chrome won't delete. Guarded so opening this file directly from disk (where

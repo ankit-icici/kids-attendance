@@ -46,7 +46,11 @@ README.md, CHANGELOG.md, LICENSE
 2. Vanilla, ES5-friendly JS — var, function declarations.
 3. Data stays on-device in localStorage, with optional Firebase sync over plain REST
    (fetch) — no Firebase SDK. All storage access stays try/catch-wrapped.
-4. NEVER put my Firebase database URL, space code, or a recovery link (#j=...) into the
+4. (v11) KEY_URL — the family-code script's address — is in index.html on purpose; it
+   is not a secret. The database URL and space code still live only in localStorage and
+   in the script's private Script Properties. Never weaken the guess cap in
+   family-code.gs: it is what makes a 4-digit code safe.
+4b. NEVER put my Firebase database URL, space code, or a recovery link (#j=...) into the
    code, the repo, or any file you produce. They live only in localStorage / my saved
    link. If you need them to diagnose something, ask me.
 5. sw.js must keep a fetch handler — Chrome's installability check depends on it, and
